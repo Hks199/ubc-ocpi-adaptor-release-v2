@@ -1,0 +1,35 @@
+// 9.4.1
+export enum OCPIChargingPreferencesResponse {
+    ACCEPTED = 'ACCEPTED',
+    DEPARTURE_REQUIRED = 'DEPARTURE_REQUIRED',
+    ENERGY_NEED_REQUIRED = 'ENERGY_NEED_REQUIRED',
+    NOT_POSSIBLE = 'NOT_POSSIBLE',
+    PROFILE_TYPE_NOT_SUPPORTED = 'PROFILE_TYPE_NOT_SUPPORTED',
+}
+
+// 9.4.2
+export enum OCPIProfileType {
+    CHEAP = 'CHEAP',
+    FAST = 'FAST',
+    GREEN = 'GREEN',
+    REGULAR = 'REGULAR',
+}
+
+// 9.4.3
+export enum OCPISessionStatus {
+    ACTIVE = 'ACTIVE',
+    COMPLETED = 'COMPLETED',
+    INVALID = 'INVALID',
+    PENDING = 'PENDING',
+    RESERVATION = 'RESERVATION',
+    CANCELLED = 'CANCELLED',
+}
+
+// #OCPIv2.1.1
+// 9.4.1
+export enum OCPIv211SessionStatus {
+    ACTIVE = 'ACTIVE',
+    COMPLETED = 'COMPLETED',
+    INVALID = 'INVALID',
+    PENDING = 'PENDING',
+}

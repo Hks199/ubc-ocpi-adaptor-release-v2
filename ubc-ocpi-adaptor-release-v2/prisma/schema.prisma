@@ -1,0 +1,519 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// OCPI 2.2.1 Location Model
+model Location {
+  id                   String    @id @default(uuid())
+  ocpi_location_id     String // OCPI ID sent by CPO
+  name                 String?
+  latitude             String // From coordinates
+  longitude            String // From coordinates
+  country_code         String
+  party_id             String
+  city                 String
+  postal_code          String?
+  state                String?
+  country              String
+  address              String
+  time_zone            String
+  parking_type         String? // OCPIParkingType enum
+  related_locations    Json? // OCPIAdditionalGeoLocation[]
+  directions           Json? // OCPIDisplayText[]
+  operator             Json? // OCPIBusinessDetailsClass
+  suboperator          Json? // OCPIBusinessDetailsClass
+  owner                Json? // OCPIBusinessDetailsClass
+  facilities           String[] // OCPIFacility[]
+  opening_times        Json? // OCPIHours
+  images               Json? // OCPIImageClass[]
+  energy_mix           Json? // OCPIEnergyMix
+  charging_when_closed Boolean?
+  publish              Boolean   @default(false)
+  publish_allowed_to   Json? // OCPIPublishTokenType[]
+  last_updated         DateTime
+  deleted              Boolean   @default(false)
+  deleted_at           DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+  external_object_id   String    @unique 
+
+  // Relations
+  evses      EVSE[]
+  partner_id String
+  partner    OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  ocpilogs   OCPILog[]
+
+  @@unique([country_code, party_id, ocpi_location_id])
+  // Optimizes lookups by OCPI location id scoped to partner
+  @@index([ocpi_location_id, partner_id])
+  @@index([partner_id])
+  @@map("location")
+}
+
+// OCPI 2.2.1 EVSE Model
+model EVSE {
+  id                      String    @id @default(uuid())
+  location_id             String
+  location                Location  @relation(fields: [location_id], references: [id], onDelete: Cascade)
+  uid                     String // OCPI ID sent by CPO
+  evse_id                 String?
+  status                  String // OCPIStatus enum
+  status_schedule         Json? // OCPIStatusSchedule[]
+  capabilities            String[] // OCPICapability[]
+  floor_level             String?
+  latitude                String? // From coordinates
+  longitude               String? // From coordinates
+  physical_reference      String?
+  directions              Json? // OCPIDisplayText[]
+  parking_restrictions    String[] // OCPIParkingRestriction[]
+  images                  Json? // OCPIImageClass[]
+  status_errorcode        String?
+  status_errordescription String?
+  last_updated            DateTime
+  deleted                 Boolean   @default(false)
+  deleted_at              DateTime?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+  partner_id              String
+  external_object_id      String    @unique 
+
+  // Relations
+  evse_connectors EVSEConnector[]
+  partner         OCPIPartner     @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  ocpilogs        OCPILog[]
+
+  @@unique([location_id, uid])
+  @@index([location_id])
+  @@map("evse")
+}
+
+// OCPI 2.2.1 Connector Model
+model EVSEConnector {
+  id                   String      @id @default(uuid())
+  evse_id              String
+  evse                 EVSE        @relation(fields: [evse_id], references: [id], onDelete: Cascade)
+  connector_id         String // OCPI ID sent by CPO
+  standard             String // OCPIConnectorType enum
+  format               String // OCPIConnectorFormat enum
+  qr_code              String?
+  power_type           String // OCPIPowerType enum
+  max_voltage          BigInt
+  max_amperage         BigInt
+  max_electric_power   BigInt?
+  terms_and_conditions String? // URL
+  last_updated         DateTime
+  deleted              Boolean     @default(false)
+  deleted_at           DateTime?
+  created_at           DateTime    @default(now())
+  updated_at           DateTime    @updatedAt
+  tariff_ids           String[]
+  tariffs              Tariff[]
+  partner_id           String
+  partner              OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  ocpilogs             OCPILog[]
+  beckn_connector_id   String      @unique // Beckn connector ID (format: IND*TPC*{ocpi_location_id}*{evse_uid}*{connector_id}). If provided, only this connector will be published.
+  ubc_catalog_id       String?     /// the catalog id used during published the cpc
+  ubc_publish_enabled  String?     @default("true")  /// Determines if a cpc should be published or not
+  ubc_publish_info     Json?       @default("{}") @db.Json /// Information about the publication of the cpc like last published_at, published, etc.
+
+
+  @@unique([evse_id, connector_id])
+  @@index([evse_id])
+  // Optimizes getByConnectorId lookups
+  @@index([connector_id])
+  @@index([partner_id])
+  @@index([beckn_connector_id])
+  @@map("evse_connector")
+}
+
+// OCPI 2.2.1 Tariff Model
+model Tariff {
+  id                  String         @id @default(uuid())
+  country_code        String
+  party_id            String
+  ocpi_tariff_id      String // OCPI ID sent by CPO
+  currency            String
+  type                String? // OCPITariffType enum
+  tariff_alt_text     Json? // OCPIDisplayText[]
+  tariff_alt_url      String? // URL
+  min_price           Json? // OCPIPrice
+  max_price           Json? // OCPIPrice
+  start_date_time     DateTime?
+  end_date_time       DateTime?
+  energy_mix          Json? // OCPIEnergyMix
+  last_updated        DateTime
+  created_at          DateTime       @default(now())
+  updated_at          DateTime       @updatedAt
+  ocpi_tariff_element Json?
+  evseconnector       EVSEConnector? @relation(fields: [eVSEConnectorId], references: [id], onDelete: Cascade)
+  eVSEConnectorId     String?
+  partner_id          String
+  partner             OCPIPartner    @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+
+  @@unique([country_code, party_id, ocpi_tariff_id])
+  @@index([country_code, party_id])
+  @@index([ocpi_tariff_id])
+  // Optimizes partner-scoped tariff queries
+  @@index([partner_id, country_code, party_id])
+  @@index([partner_id])
+  @@map("tariff")
+}
+
+// model CpoConnection {
+//   id            String    @id @default(uuid())
+//   cpo_id        String    @unique
+//   token         String
+//   party_id      String
+//   country_code  String
+//   endpoints     Json // Store OCPI endpoints as JSON
+//   status        String    @default("pending") // pending, registered, active, inactive
+//   registered_at DateTime?
+//   created_at    DateTime  @default(now())
+//   updated_at    DateTime  @updatedAt
+
+//   @@map("cpo_connections")
+// }
+
+// model SyncLog {
+//   id            String    @id @default(uuid())
+//   sync_type     String // locations, tariffs
+//   status        String // success, failed, in_progress
+//   records_count Int       @default(0)
+//   started_at    DateTime  @default(now())
+//   completed_at  DateTime?
+//   error_message String?
+//   created_at    DateTime  @default(now())
+//   updated_at    DateTime  @updatedAt
+
+//   @@index([sync_type])
+//   @@index([status])
+//   @@map("sync_logs")
+// }
+
+// model ApiLog {
+//   id            String   @id @default(uuid())
+//   method        String
+//   path          String
+//   status_code   Int
+//   request_body  Json?
+//   response_body Json?
+//   duration      Int? // Duration in milliseconds
+//   created_at    DateTime @default(now())
+
+//   @@index([path])
+//   @@index([status_code])
+//   @@index([created_at])
+//   @@map("api_logs")
+// }
+
+// OCPI 2.2.1 Session Model
+model Session {
+  id                                String       @id @default(uuid())
+  country_code                      String?
+  party_id                          String?
+  cpo_session_id                    String? // OCPI ID sent by CPO
+  start_date_time                   DateTime?
+  end_date_time                     DateTime?
+  kwh                               Decimal?     @db.Decimal(10, 3)
+  cdr_token                         Json? // OCPICdrToken
+  auth_method                       String? // OCPIAuthMethod enum
+  authorization_reference           String?      @unique // EMSP session ID
+  location_id                       String?
+  evse_uid                          String?
+  connector_id                      String?
+  meter_id                          String?
+  currency                          String?
+  charging_periods                  Json? // OCPIChargingPeriod[]
+  total_cost                        Json? // OCPIPrice
+  status                            String? // OCPISessionStatus enum
+  last_updated                      DateTime?
+  deleted                           Boolean      @default(false)
+  deleted_at                        DateTime?
+  created_at                        DateTime     @default(now())
+  updated_at                        DateTime     @updatedAt
+  partner_id                        String?
+  partner                           OCPIPartner? @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  requested_energy_units            Decimal?     @db.Decimal(10, 3)
+  buyer_info                        Json? // OCPIBusinessDetailsClass
+  final_amount                      Json       @default("{}") // Not an OCPI field - internal use only
+  additional_props                  Json?      @default("{}") @db.Json // Store if on_update is called for the cdr or not
+
+  // Log relations (named to avoid ambiguity)
+  ocpi_logs_session                 OCPILog[]    @relation("OCPILogSession")
+  ocpi_logs_cpo_session             OCPILog[]    @relation("OCPILogCpoSession")
+  ocpi_logs_authorization_reference OCPILog[]    @relation("OCPILogAuthorizationReferenceSession")
+
+  @@index([country_code, party_id])
+  @@index([location_id])
+  @@index([status])
+  // Optimizes lookups by authorization_reference and CPO session id
+  @@index([authorization_reference, partner_id])
+  @@index([cpo_session_id, partner_id])
+  // Optimizes partner-scoped session listings ordered by last_updated
+  @@index([partner_id, last_updated(sort: Desc)])
+  @@index([partner_id])
+  @@map("session")
+}
+
+// OCPI 2.2.1 CDR Model
+model CDR {
+  id                              String      @id @default(uuid())
+  country_code                    String
+  party_id                        String
+  ocpi_cdr_id                     String // OCPI ID sent by CPO
+  start_date_time                 DateTime
+  end_date_time                   DateTime
+  session_id                      String?
+  cdr_token                       Json // OCPICdrToken
+  auth_method                     String // OCPIAuthMethod enum
+  authorization_reference         String?
+  cdr_location                    Json // OCPICdrLocation
+  meter_id                        String?
+  currency                        String
+  tariffs                         Json? // OCPITariff[]
+  charging_periods                Json // OCPIChargingPeriod[]
+  signed_data                     Json? // OCPISignedData
+  total_cost                      Json // OCPIPrice
+  total_fixed_cost                Json? // OCPIPrice
+  total_energy                    Decimal     @db.Decimal(10, 3)
+  total_energy_cost               Json? // OCPIPrice
+  total_time                      BigInt
+  total_time_cost                 Json? // OCPIPrice
+  total_parking_time              BigInt?
+  total_parking_cost              Json? // OCPIPrice
+  total_reservation_cost          Json? // OCPIPrice
+  remark                          String?
+  invoice_reference_id            String?
+  credit                          Boolean?
+  credit_reference_id             String?
+  // home_charging_compensation Boolean?
+  remarks                         String?
+  last_updated                    DateTime
+  deleted                         Boolean     @default(false)
+  deleted_at                      DateTime?
+  created_at                      DateTime    @default(now())
+  updated_at                      DateTime    @updatedAt
+  partner_id                      String
+  partner                         OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  invoice_details                 Json?       @default("{}") @db.Json
+
+  @@unique([country_code, party_id, ocpi_cdr_id])
+  @@index([country_code, party_id])
+  @@index([ocpi_cdr_id])
+  // Optimizes partner-scoped CDR listings ordered by last_updated
+  @@index([partner_id, last_updated(sort: Desc)])
+  @@index([partner_id])
+  @@map("cdr")
+}
+
+// OCPI 2.2.1 Token Model
+model Token {
+  id                   String      @id @default(uuid())
+  country_code         String
+  party_id             String
+  uid                  String // OCPI ID sent by CPO
+  type                 String // OCPITokenType enum
+  contract_id          String
+  visual_number        String?
+  issuer               String
+  group_id             String?
+  valid                Boolean
+  whitelist            String // OCPIWhitelistType enum
+  language             String?
+  default_profile_type String? // OCPIProfileType enum
+  energy_contract      Json? // OCPIEnergyContract
+  last_updated         DateTime
+  deleted              Boolean     @default(false)
+  deleted_at           DateTime?
+  created_at           DateTime    @default(now())
+  updated_at           DateTime    @updatedAt
+  partner_id           String
+  partner              OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+
+  @@unique([country_code, party_id, uid])
+  @@index([country_code, party_id])
+  @@index([uid])
+  // Optimizes partner-scoped token listings ordered by last_updated
+  @@index([partner_id, last_updated(sort: Desc)])
+  @@index([partner_id])
+  @@map("token")
+}
+
+// OCPI Partner (CPO) integration metadata
+model OCPIPartner {
+  id               String                  @id @default(uuid())
+  name             String?
+  country_code     String
+  party_id         String
+  role             String                  @default("CPO") // CPO | EMSP
+  versions_url     String
+  status           String                  @default("INIT")
+  credentials      OCPIPartnerCredentials?
+  endpoints        OCPIPartnerEndpoint[]
+  versions         OCPIVersion[]
+  created_at       DateTime                @default(now())
+  updated_at       DateTime                @updatedAt
+  deleted          Boolean                 @default(false)
+  deleted_at       DateTime?
+  locations        Location[]
+  evses            EVSE[]
+  evseconnectors   EVSEConnector[]
+  tariffs          Tariff[]
+  sessions         Session[]
+  cdrs             CDR[]
+  tokens           Token[]
+  ocpilogs         OCPILog[]
+  paymentTxns      PaymentTxn[]
+  additional_props Json?                   @default("{}") @db.Json
+
+  @@unique([country_code, party_id])
+  // Optimizes lookups of EMSP/CPO by role + deleted flag
+  @@index([role, deleted])
+  @@map("ocpi_partner")
+}
+
+// OCPI credentials exchanged during handshake for a given partner
+model OCPIPartnerCredentials {
+  id              String      @id @default(uuid())
+  partner_id      String      @unique
+  partner         OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  cpo_auth_token  String? // for initial GET /versions, if applicable
+  emsp_auth_token String? // token the CPO uses to call this EMSP
+  cpo_url         String? // CPO credentials URL
+  emsp_url        String? // EMSP credentials URL exposed to CPO
+  deleted         Boolean     @default(false)
+  deleted_at      DateTime?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+
+  // Optimizes auth-token based lookups
+  @@index([cpo_auth_token])
+  @@index([emsp_auth_token])
+  @@map("ocpi_partner_credentials")
+}
+
+// OCPI endpoints advertised by a partner for a specific version
+model OCPIPartnerEndpoint {
+  id         String      @id @default(uuid())
+  partner_id String
+  partner    OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  version    String // e.g. "2.2.1"
+  module     String // e.g. "locations", "tariffs"
+  role       String // "SENDER" | "RECEIVER"
+  url        String
+  deleted    Boolean     @default(false)
+  deleted_at DateTime?
+  created_at DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  // Optimizes endpoint discovery by partner/module/role/version
+  @@index([partner_id, module, role, version])
+  @@index([partner_id])
+  @@map("ocpi_partner_endpoint")
+}
+
+model OCPIVersion {
+  id          String      @id @default(uuid())
+  partner_id  String
+  partner     OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  version_id  String // e.g. "2.2.1"
+  version_url String
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+  deleted     Boolean     @default(false)
+  deleted_at  DateTime?
+
+  @@index([partner_id])
+  @@map("ocpi_version")
+}
+
+/// The model name has to be `UeiLog` because `UEILog` is treated as `uEILog` in the codebase
+model BecknLog {
+  id               String    @id @default(uuid())
+  aiid             BigInt    @default(autoincrement())
+  domain           String
+  action           String
+  transaction_id   String
+  message_id       String
+  payload          Json?     @default("{}") @db.Json
+  additional_props Json?     @default("{}") @db.Json /// Added for any future requirements
+  created_on       DateTime  @default(now())
+  updated_on       DateTime  @updatedAt
+  deleted          Boolean?  @default(false)
+  deleted_on       DateTime?
+
+  @@index([domain])
+  @@index([action])
+  @@index([transaction_id])
+  @@index([message_id])
+  @@index([domain, action, transaction_id, created_on(sort: Desc)])
+  @@index([created_on(sort: Desc)])
+  @@map(name: "beckn_log")
+}
+
+model OCPILog {
+  id                              String         @id @default(uuid())
+  aiid                            BigInt         @default(autoincrement())
+  command                         String // OCPILogCommand enum
+  sender_type                     String // CPO | EMSP
+  url                             String
+  payload                         Json           @db.Json
+  additional_props                Json?          @default("{}") @db.Json
+  partner_id                      String
+  partner                         OCPIPartner    @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  location_id                     String?
+  location                        Location?      @relation(fields: [location_id], references: [id], onDelete: Cascade)
+  evse_id                         String?
+  evse                            EVSE?          @relation(fields: [evse_id], references: [id], onDelete: Cascade)
+  connector_id                    String?
+  connector                       EVSEConnector? @relation(fields: [connector_id], references: [id], onDelete: Cascade)
+  session_id                      String?
+  session                         Session?       @relation("OCPILogSession", fields: [session_id], references: [id], onDelete: Cascade)
+  authorization_reference         String?
+  authorization_reference_session Session?       @relation("OCPILogAuthorizationReferenceSession", fields: [authorization_reference], references: [id], onDelete: Cascade)
+  cpo_session_id                  String?
+  cpo_session                     Session?       @relation("OCPILogCpoSession", fields: [cpo_session_id], references: [id], onDelete: Cascade)
+  created_on                      DateTime       @default(now())
+
+  // Optimizes log exploration by partner and time
+  @@index([partner_id, created_on(sort: Desc)])
+  @@index([command])
+  @@index([sender_type])
+  @@map(name: "ocpi_log")
+}
+
+model PaymentTxn {
+  id                              String      @id @default(uuid())
+  authorization_reference         String      
+  amount                          Decimal     @db.Decimal(10, 2)
+  payment_link                    String?
+  payment_breakdown               Json        @default("{}") @db.Json
+  status                          String
+  requested_energy_units          Decimal     @db.Decimal(10, 3)
+  partner_id                      String
+  partner                         OCPIPartner @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  beckn_transaction_id            String
+  payment_gateway_order_id        String?     // BillDesk/Razorpay order ID
+  payment_gateway_payment_id      String?     // BillDesk/Razorpay payment/transaction ID
+  details                         Json?       @default("{}") @db.Json // Full payment gateway response
+  additional_props                Json?       @default("{}") @db.Json
+  beneficiary                     String?     // 'BAP' or 'BPP'
+  created_at                      DateTime    @default(now())
+  updated_at                      DateTime    @updatedAt
+  deleted                         Boolean     @default(false)
+  deleted_at                      DateTime?
+  service_charge                  Json       @default("{}") @db.Json // {"buyer_finder_fee": 0.9, "network_fee": 0.3} // in percentage
+
+  @@index([authorization_reference])
+  @@index([partner_id])
+  @@index([payment_gateway_order_id])
+  @@map("payment_txn")
+}

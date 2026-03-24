@@ -1,0 +1,42 @@
+// 10.4.1
+export enum OCPIAuthMethod {
+    AUTH_REQUEST = 'AUTH_REQUEST',
+    COMMAND = 'COMMAND',
+    WHITELIST = 'WHITELIST',
+}
+
+// #OCPIv2.1.1
+// 10.4.1
+export enum OCPIv211AuthMethod {
+    AUTH_REQUEST = 'AUTH_REQUEST',
+    WHITELIST = 'WHITELIST',
+}
+
+// 10.4.3
+export enum OCPICdrDimensionType {
+    CURRENT = 'CURRENT',
+    ENERGY = 'ENERGY',
+    ENERGY_EXPORT = 'ENERGY_EXPORT',
+    ENERGY_IMPORT = 'ENERGY_IMPORT',
+    MAX_CURRENT = 'MAX_CURRENT',
+    MIN_CURRENT = 'MIN_CURRENT',
+    MAX_POWER = 'MAX_POWER',
+    MIN_POWER = 'MIN_POWER',
+    PARKING_TIME = 'PARKING_TIME',
+    POWER = 'POWER',
+    RESERVATION_TIME = 'RESERVATION_TIME',
+    STATE_OF_CHARGE = 'STATE_OF_CHARGE',
+    TIME = 'TIME',
+    VOLTAGE = 'VOLTAGE',
+}
+
+// #OCPIv2.1.1
+// 10.4.3
+export enum OCPIv211CdrDimensionType {
+    ENERGY = 'ENERGY',
+    FLAT = 'FLAT',
+    MAX_CURRENT = 'MAX_CURRENT',
+    MIN_CURRENT = 'MIN_CURRENT',
+    PARKING_TIME = 'PARKING_TIME',
+    TIME = 'TIME',
+}

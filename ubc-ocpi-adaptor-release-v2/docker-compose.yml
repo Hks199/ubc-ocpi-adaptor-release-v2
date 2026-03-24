@@ -1,0 +1,67 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ubc-ocpi-adaptor
+    ports:
+      - "${PORT:-6001}:6001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=6001
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production-min-32-characters}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
+      - OCPI_HOST=${OCPI_HOST:-https://nearly-boss-pheasant.ngrok-free.app}
+      - CDS_BASE_URL=${CDS_BASE_URL:-https://cds.example.com}
+      - CDS_API_KEY=${CDS_API_KEY:-your-cds-api-key}
+      - EV_CHARGING_UBC_BPP_ID=${EV_CHARGING_UBC_BPP_ID:-pulseenergy-ubc-local-bpp}
+      - EV_CHARGING_UBC_UNIQUE_ID=${EV_CHARGING_UBC_UNIQUE_ID:-76EU7ncBX74BMNTQJMcMYoTMSzU7k71owUF53fN4jdxmosxZrdjdDk}
+      - EV_CHARGING_UBC_BPP_CLIENT_HOST=${EV_CHARGING_UBC_BPP_CLIENT_HOST:-http://host.docker.internal:7082}
+      - PRIVATE_KEY=${PRIVATE_KEY:-}
+      - SHOULD_SIGN_CALLBACK_REQUESTS=${SHOULD_SIGN_CALLBACK_REQUESTS:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CLOUD_PROVIDER=${CLOUD_PROVIDER:-local}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:6001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ubc-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ubc-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-ubc_ocpi_adaptor}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ubc-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  ubc-network:
+    driver: bridge
+
