@@ -162,6 +162,9 @@ export default class Utils {
         return `${GLOBAL_VARS.EV_CHARGING_UBC_BPP_CLIENT_HOST}/bpp/receiver`;
     }
 
+    public static getBppUrl(): string {
+        return `${GLOBAL_VARS.EV_CHARGING_UBC_BPP_CLIENT_HOST}/bap/receiver`;
+    }
 
     public static getBPPContext(params: {
         action: BecknAction,

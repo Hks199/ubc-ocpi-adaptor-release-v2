@@ -317,7 +317,7 @@ export default class SelectActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnSelectCallToBecknONIX(payload: UBCOnSelectRequestPayload): Promise<any> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.getBppUrl();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_select}`,
@@ -344,10 +344,27 @@ export default class SelectActionHandler {
         const partnerId = tariff.partner_id;
 
         const razorpayCredentials = await RazorpayPaymentGatewayService.getCredentials(partnerId);
+
+        //************************************************uncomment it later after testing */
+        // if (!razorpayCredentials) {
+        //     throw new Error('Razorpay credentials not found for partner');
+        // }
+        // const { fee_percentage: feePercentage = 0.2} = razorpayCredentials.credentials;
+
+// *********************************************remove below code******************************
+         let feePercentage = 0.2; // default fallback
+
         if (!razorpayCredentials) {
-            throw new Error('Razorpay credentials not found for partner');
+             logger.warn(`⚠️ Razorpay not configured for partner ${partnerId}, skipping payment config`);
+
+             // keep default feePercentage OR set to 0 if you want no fee
+             feePercentage = 0; 
+        } 
+        else {
+             feePercentage = razorpayCredentials.credentials?.fee_percentage ?? 0.2;
         }
-        const { fee_percentage: feePercentage = 0.2} = razorpayCredentials.credentials;
+       
+//************************************************************************************ */
 
         // Calculate charging session cost excl VAT (base price only)
         let chargingSessionCostExclVat = 0;

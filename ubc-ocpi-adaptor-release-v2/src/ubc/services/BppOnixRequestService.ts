@@ -6,7 +6,7 @@ import BecknLoggingService from "./BecknLoggingService";
 import Utils from "../../utils/Utils";
 import GLOBAL_VARS from "../../constants/global-vars";
 import { createAuthorizationHeader } from "../../utils/auth";
-import { response } from "express";
+// import { response } from "express";
 
 // Used to send requests to the BAP's beckn-provider
 export default class BppOnixRequestService {
