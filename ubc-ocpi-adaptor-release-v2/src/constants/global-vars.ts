@@ -10,6 +10,7 @@ const GLOBAL_VARS = {
     EV_CHARGING_UBC_UNIQUE_ID: process.env.EV_CHARGING_UBC_UNIQUE_ID || '76EU7ncBX74BMNTQJMcMYoTMSzU7k71owUF53fN4jdxmosxZrdjdDk',
     INTERNAL_PAYMENT_LINK_HOST: process.env.INTERNAL_PAYMENT_LINK_HOST || 'http://localhost:6001',
     ENABLE_CATALOG_PUBLISH: process.env.ENABLE_CATALOG_PUBLISH || 'false',
+    BPP_URL: process.env.BPP_URL || 'http://ubc-ocpi-adaptor:6001',
 };
 
 export default GLOBAL_VARS;

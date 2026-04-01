@@ -632,7 +632,7 @@ export default class InitActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnInitCallToBecknONIX(payload: UBCOnInitRequestPayload): Promise<any> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.getBppUrl();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_init}`,

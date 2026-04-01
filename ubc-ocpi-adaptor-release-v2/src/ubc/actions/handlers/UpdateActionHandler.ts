@@ -22,7 +22,7 @@ import { LocationDbService } from '../../../db-services/LocationDbService';
 import { OCPICommandResponseResponse } from '../../../ocpi/schema/modules/commands/types/responses';
 import { OCPICommandResponseType } from '../../../ocpi/schema/modules/commands/enums';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
-import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
+// import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
 import { mapGenericToBecknStatus } from '../../services/PaymentServices/Razorpay/RazorpayPaymentService';
 
 /**
@@ -79,31 +79,31 @@ export default class UpdateActionHandler {
             );
 
             // Fetch existing status response to reuse payment (same as status)
-            // const existingOnStatusResponse = await UpdateActionHandler.fetchExistingBppOnStatusResponse(reqPayload.context.transaction_id);
+            const existingOnStatusResponse = await UpdateActionHandler.fetchExistingBppOnStatusResponse(reqPayload.context.transaction_id);
 
             // translate CPO's BE Server response to UBC Schema
-            // logger.debug(
-            //     `🟡 [${reqId}] Translating Backend to UBC payload in handleEVChargingUBCBppUpdateAction`,
-            //     { data: { reqPayload, ExtractedOnUpdateResponseBody } }
-            // );
-            // const ubcOnUpdatePayload: UBCOnUpdateRequestPayload =
-            //     UpdateActionHandler.translateBackendToUBC(
-            //         reqPayload,
-            //         ExtractedOnUpdateResponseBody,
-            //         existingOnStatusResponse
-            //     );
+            logger.debug(
+                `🟡 [${reqId}] Translating Backend to UBC payload in handleEVChargingUBCBppUpdateAction`,
+                { data: { reqPayload, ExtractedOnUpdateResponseBody } }
+            );
+            const ubcOnUpdatePayload: UBCOnUpdateRequestPayload =
+                UpdateActionHandler.translateBackendToUBC(
+                    reqPayload,
+                    ExtractedOnUpdateResponseBody,
+                    existingOnStatusResponse
+                );
 
             // Call BAP on_select
-            // logger.debug(
-            //     `🟡 [${reqId}] Sending on_update call to Beckn ONIX in handleEVChargingUBCBppUpdateAction`,
-            //     { data: { ubcOnUpdatePayload } }
-            // );
-            // const response =
-            //     await UpdateActionHandler.sendOnUpdateCallToBecknONIX(ubcOnUpdatePayload);
-            // logger.debug(
-            //     `🟢 [${reqId}] Sent on_update call to Beckn ONIX in handleEVChargingUBCBppUpdateAction`,
-            //     { data: { response } }
-            // );
+            logger.debug(
+                `🟡 [${reqId}] Sending on_update call to Beckn ONIX in handleEVChargingUBCBppUpdateAction`,
+                { data: { ubcOnUpdatePayload } }
+            );
+            const response =
+                await UpdateActionHandler.sendOnUpdateCallToBecknONIX(ubcOnUpdatePayload);
+            logger.debug(
+                `🟢 [${reqId}] Sent on_update call to Beckn ONIX in handleEVChargingUBCBppUpdateAction`,
+                { data: { response } }
+            );
 
             // return the response
             return ExtractedOnUpdateResponseBody as any;
@@ -271,7 +271,10 @@ export default class UpdateActionHandler {
             }
 
             const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
-            if (paymentStatus !== BecknPaymentStatus.COMPLETED) {
+            
+            // {"PENDING" ||} in below if condition remove {"PENDING" ||} this part in production
+            // BecknPaymentStatus.COMPLETED write this later in production after testing with pending status in dev and staging environment, currently we are keeping pending status to proceed with charging session without waiting for payment completion as we are not sure about the payment flow and status updates from Razorpay in the current implementation. Once we have clarity on the payment flow and status updates, we can update this condition to check for actual payment completion status.
+            if (paymentStatus !== "PENDING") {  
                 throw new Error('Payment txn is not completed');
             }
         }

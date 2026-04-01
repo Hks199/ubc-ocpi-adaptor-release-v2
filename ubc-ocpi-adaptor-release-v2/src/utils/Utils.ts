@@ -166,6 +166,10 @@ export default class Utils {
         return `${GLOBAL_VARS.EV_CHARGING_UBC_BPP_CLIENT_HOST}/bap/receiver`;
     }
 
+    public static bpp_url(): string {
+        return `${GLOBAL_VARS.BPP_URL}/bpp/receiver`;
+    }
+
     public static getBPPContext(params: {
         action: BecknAction,
         version: string,
@@ -185,7 +189,7 @@ export default class Utils {
             action: action,
             version: version,
             bpp_id: this.getBppId(),
-            bpp_uri: this.getBppUri(),
+            bpp_uri: this.bpp_url(),
             transaction_id: transaction_id,
             message_id: message_id,
             timestamp: timestamp ?? new Date().toISOString(),
