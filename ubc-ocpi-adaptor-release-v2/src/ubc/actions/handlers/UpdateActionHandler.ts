@@ -28,14 +28,14 @@ import { mapGenericToBecknStatus } from '../../services/PaymentServices/Razorpay
 /**
  * Handler for update action
  */
-export default class UpdateActionHandler {
+export default class  {
     public static async handleBppUpdateAction(
         req: Request
     ): Promise<HttpResponse<BecknActionResponse>> {
         const payload = req.body as UBCUpdateRequestPayload;
 
         return OnixBppController.requestWrapper(BecknAction.update, req, () => {
-            UpdateActionHandler.handleEVChargingUBCBppUpdateAction(payload)
+            .handleEVChargingUBCBppUpdateAction(payload)
                 .then((ubcOnUpdateResponsePayload: UBCOnUpdateRequestPayload) => {
                     logger.debug(`🟢 Sending select response in handleBppSelectRequest`, {
                         data: ubcOnUpdateResponsePayload,
@@ -60,10 +60,10 @@ export default class UpdateActionHandler {
                 { data: { logData, reqPayload } }
             );
             const backendUpdatePayload: ExtractedUpdateRequestBody =
-                UpdateActionHandler.translateUBCToBackendPayload(reqPayload);
+                .translateUBCToBackendPayload(reqPayload);
 
             // Fetch on_init response to get beneficiary
-            const existingOnInitResponse = await UpdateActionHandler.fetchExistingBppOnInitResponse(reqPayload.context.transaction_id);
+            const existingOnInitResponse = await .fetchExistingBppOnInitResponse(reqPayload.context.transaction_id);
             const beneficiary = existingOnInitResponse?.message?.order?.['beckn:payment']?.['beckn:beneficiary'] as 'BPP' | 'BAP' | undefined || 'BPP';
 
             // make a request to CPO BE server
@@ -72,14 +72,14 @@ export default class UpdateActionHandler {
                 { data: { backendUpdatePayload, beneficiary } }
             );
             const ExtractedOnUpdateResponseBody: ExtractedOnUpdateResponsePayload =
-                await UpdateActionHandler.sendUpdateCallToBackend(backendUpdatePayload, beneficiary);
+                await .sendUpdateCallToBackend(backendUpdatePayload, beneficiary);
             logger.debug(
                 `🟢 [${reqId}] Received update response from backend in handleEVChargingUBCBppUpdateAction`,
                 { data: { ExtractedOnUpdateResponseBody } }
             );
 
             // Fetch existing status response to reuse payment (same as status)
-            const existingOnStatusResponse = await UpdateActionHandler.fetchExistingBppOnStatusResponse(reqPayload.context.transaction_id);
+            const existingOnStatusResponse = await .fetchExistingBppOnStatusResponse(reqPayload.context.transaction_id);
 
             // translate CPO's BE Server response to UBC Schema
             logger.debug(
@@ -87,7 +87,7 @@ export default class UpdateActionHandler {
                 { data: { reqPayload, ExtractedOnUpdateResponseBody } }
             );
             const ubcOnUpdatePayload: UBCOnUpdateRequestPayload =
-                UpdateActionHandler.translateBackendToUBC(
+                .translateBackendToUBC(
                     reqPayload,
                     ExtractedOnUpdateResponseBody,
                     existingOnStatusResponse
@@ -99,7 +99,7 @@ export default class UpdateActionHandler {
                 { data: { ubcOnUpdatePayload } }
             );
             const response =
-                await UpdateActionHandler.sendOnUpdateCallToBecknONIX(ubcOnUpdatePayload);
+                await .sendOnUpdateCallToBecknONIX(ubcOnUpdatePayload);
             logger.debug(
                 `🟢 [${reqId}] Sent on_update call to Beckn ONIX in handleEVChargingUBCBppUpdateAction`,
                 { data: { response } }
@@ -120,7 +120,7 @@ export default class UpdateActionHandler {
             // Send error response to BAP side so the stitched response can be resolved
             // This prevents the request from getting stuck in REQUESTS_STORE waiting for a callback
             // try {
-            //     await UpdateActionHandler.sendErrorOnUpdateResponse(reqPayload, e instanceof Error ? e : new Error(e?.toString() || 'Unknown error'));
+            //     await .sendErrorOnUpdateResponse(reqPayload, e instanceof Error ? e : new Error(e?.toString() || 'Unknown error'));
             // }
             // catch (sendError: any) {
             //     logger.error(`🔴 [${reqId}] Error sending error on_update response`, {
@@ -366,7 +366,7 @@ export default class UpdateActionHandler {
             //                     await AdminCommandsModule.stopCharging(req);
             //                 }
             //                 catch (e: any) {
-            //                     logger.error(`🔴 Error in UpdateActionHandler.handleEVChargingUBCBppUpdateAction: ${e?.toString()}`, e);
+            //                     logger.error(`🔴 Error in .handleEVChargingUBCBppUpdateAction: ${e?.toString()}`, e);
             //                 }
             //             }, 1000 * stopChargingDelay);
 
@@ -475,7 +475,7 @@ export default class UpdateActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnUpdateCallToBecknONIX(payload: UBCOnUpdateRequestPayload): Promise<any> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.getBppUrl();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_update}`,

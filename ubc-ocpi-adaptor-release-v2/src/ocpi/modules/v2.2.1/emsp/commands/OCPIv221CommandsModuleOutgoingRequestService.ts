@@ -238,6 +238,7 @@ export default class OCPIv221CommandsModuleOutgoingRequestService {
      * Generic variant that can be used with an Express Request:
      * expects :command_type in params and the raw OCPI command body in req.body.
      */
+    
     public static async sendPostCommand(
         req: Request,
         cpoAuthToken: string,
