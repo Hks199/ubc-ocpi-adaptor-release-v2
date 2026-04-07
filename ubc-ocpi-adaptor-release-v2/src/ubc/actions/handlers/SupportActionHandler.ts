@@ -180,7 +180,7 @@ export default class SupportActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnSupportCallToBecknONIX(payload: UBCOnSupportRequestPayload): Promise<any> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.getBppUrl();
         return await BppOnixRequestService.sendPostRequest({
             url: `${bppHost}/${BecknAction.on_support}`,
             data: payload,

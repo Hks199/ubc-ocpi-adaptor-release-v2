@@ -28,3 +28,4 @@ export enum BecknAction {
     on_support = 'on_support',
     on_publish = 'on_catalog_publish',
 }
+

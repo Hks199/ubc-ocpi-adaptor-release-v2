@@ -264,7 +264,7 @@ export default class CancelActionHandler {
      * Sends on_cancel response to beckn-ONIX (BPP)
      */
     static async sendOnCancelCallToBecknONIX(payload: UBCOnCancelRequestPayload): Promise<any> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.getBppUrl();
         const response = await BppOnixRequestService.sendPostRequest({
             url: `${bppHost}/${BecknAction.on_cancel}`,
             data: payload,
@@ -275,6 +275,7 @@ export default class CancelActionHandler {
     /**
      * Main handler for cancel action on BPP side
      */
+    
     public static async handleEVChargingUBCBppCancelAction(cancelRequest: UBCCancelRequestPayload): Promise<UBCOnCancelRequestPayload> {
         try {
             // Build on_cancel response based on charging status
