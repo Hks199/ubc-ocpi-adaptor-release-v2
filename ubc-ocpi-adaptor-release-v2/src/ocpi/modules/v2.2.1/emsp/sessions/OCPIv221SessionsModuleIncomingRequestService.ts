@@ -261,75 +261,72 @@ export default class OCPIv221SessionsModuleIncomingRequestService {
      * Create or fully replace a session. 
      */
     public static async handlePutSession(
-        req: Request,
-        res: Response,
-        partnerCredentials: OCPIPartnerCredentials,
-    ): Promise<HttpResponse<OCPISessionResponse>> {
-        const reqId = req.headers['x-correlation-id'] as string || req.headers['x-request-id'] as string || 'unknown';
-        const prisma = databaseService.prisma;
-        const { country_code, party_id, session_id } = req.params as {
-            country_code: string;
-            party_id: string;
-            session_id: string;
-        };
-        const logData = { action: 'PUT /sessions/:session_id', partnerId: partnerCredentials.partner_id, session_id };
+    req: Request,
+    res: Response,
+    partnerCredentials: OCPIPartnerCredentials,
+): Promise<HttpResponse<OCPISessionResponse>> {
 
-        try {
-            logger.debug(`🟡 [${reqId}] Starting PUT /sessions/:session_id in handlePutSession`, { data: logData });
+    const reqId =
+        (req.headers['x-correlation-id'] as string) ||
+        (req.headers['x-request-id'] as string) ||
+        'unknown';
 
-            // Log incoming request (non-blocking)
-            // Pass OCPI IDs from params - logging function will resolve them to internal DB IDs
-            OCPIRequestLogService.logIncomingRequest({
-                req,
-                partnerId: partnerCredentials.partner_id,
-                command: OCPILogCommand.PutSessionReq,
-                ocpi_session_id: session_id,
+    const prisma = databaseService.prisma;
+
+    const { country_code, party_id, session_id } = req.params as {
+        country_code: string;
+        party_id: string;
+        session_id: string;
+    };
+
+    const logData = {
+        action: 'PUT /sessions/:session_id',
+        partnerId: partnerCredentials.partner_id,
+        session_id,
+    };
+
+    try {
+        logger.debug(`🟡 [${reqId}] Start PUT session`, { data: logData });
+
+        const payload = req.body as OCPISession;
+
+        // ✅ VALIDATION
+        if (
+            !payload ||
+            payload.country_code !== country_code ||
+            payload.party_id !== party_id ||
+            payload.id !== session_id
+        ) {
+            return {
+                httpStatus: 400,
+                payload: {
+                    status_code: OCPIResponseStatusCode.status_2000,
+                    status_message: 'Path parameters and session payload must match',
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        }
+
+        // =========================================================
+        // 🔥 STEP 1: FIND BY CPO SESSION ID (PRIMARY)
+        // =========================================================
+        let existing = await prisma.session.findFirst({
+            where: {
+                cpo_session_id: session_id,
+                partner_id: partnerCredentials.partner_id,
+                deleted: false,
+            },
+        });
+
+        // =========================================================
+        // 🔥 STEP 2: FALLBACK (ONLY FIRST TIME)
+        // =========================================================
+        if (!existing && payload.authorization_reference) {
+            logger.debug(`🟡 [${reqId}] Fallback using authorization_reference`, {
+                data: { auth_ref: payload.authorization_reference },
             });
 
-            logger.debug(`🟡 [${reqId}] Parsing PUT session payload in handlePutSession`, { 
-                data: { logData, hasBody: !!req.body } 
-            });
-            const payload = req.body as OCPISession;
-
-            if (
-                !payload ||
-                payload.country_code !== country_code ||
-                payload.party_id !== party_id ||
-                payload.id !== session_id
-            ) {
-                logger.warn(`🟡 [${reqId}] Path parameters and payload mismatch in handlePutSession`, { 
-                    data: { logData, payload: { country_code: payload?.country_code, party_id: payload?.party_id, id: payload?.id }, 
-                    params: { country_code, party_id, session_id } } 
-                });
-                const response = {
-                    httpStatus: 400,
-                    payload: {
-                        status_code: OCPIResponseStatusCode.status_2000,
-                        status_message: 'Path parameters and session payload must match',
-                        timestamp: new Date().toISOString(),
-                    },
-                };
-
-                // Log outgoing response (non-blocking)
-                // Pass OCPI IDs from params/body - logging function will try to resolve them
-                OCPIRequestLogService.logIncomingResponse({
-                    req,
-                    res,
-                    responseBody: response.payload,
-                    statusCode: response.httpStatus,
-                    partnerId: partnerCredentials.partner_id,
-                    command: OCPILogCommand.PutSessionRes,
-                    cpo_session_id: session_id, // session_id from params is the CPO's session ID
-                    authorization_reference: payload?.authorization_reference,
-                });
-
-                return response;
-            }
-
-            logger.debug(`🟡 [${reqId}] Finding existing session by authorization_reference in handlePutSession`, { 
-                data: { logData, authorization_reference: payload.authorization_reference } 
-            });
-            const existing = await prisma.session.findFirst({
+            existing = await prisma.session.findFirst({
                 where: {
                     authorization_reference: payload.authorization_reference,
                     partner_id: partnerCredentials.partner_id,
@@ -337,82 +334,103 @@ export default class OCPIv221SessionsModuleIncomingRequestService {
                 },
             });
 
-            logger.debug(`🟡 [${reqId}] ${existing ? 'Updating' : 'Creating'} session in handlePutSession`, { 
-                data: { logData, sessionExists: !!existing } 
-            });
-            let stored: PrismaSession;
-            if (existing) {
-                // Build update fields - only include fields present in payload that have changed
-                logger.debug(`🟡 [${reqId}] Building session update fields in handlePutSession`, { data: logData });
-                const sessionUpdateFields = SessionService.buildSessionUpdateFields(payload, existing);
-                // Only update if there are changes
-                if (!isEmpty(sessionUpdateFields)) {
-                    stored = await prisma.session.update({
-                        where: { id: existing.id },
-                        data: sessionUpdateFields,
-                    });
-                    logger.debug(`🟢 [${reqId}] Updated existing session in handlePutSession`, { 
-                        data: { logData, sessionId: stored.id } 
-                    });
-                    TrackActionHandler.sendOnTrackToBAPONIX(stored?.authorization_reference ?? '');
-                }
-                else {
-                    logger.debug(`🟡 [${reqId}] No changes detected, using existing session in handlePutSession`, { data: logData });
-                    stored = existing;
-                }
+            // ✅ Attach session_id if found
+            if (existing && !existing.cpo_session_id) {
+                logger.debug(`🟡 [${reqId}] Attaching cpo_session_id to existing session`, {
+                    data: { session_id },
+                });
+
+                existing = await prisma.session.update({
+                    where: { id: existing.id },
+                    data: { cpo_session_id: session_id },
+                });
             }
+        }
+
+        let stored: PrismaSession;
+
+        // =========================================================
+        // 🔥 STEP 3: UPDATE EXISTING
+        // =========================================================
+        if (existing) {
+            const updateFields = SessionService.buildSessionUpdateFields(payload, existing);
+
+            // ✅ Always ensure session_id is set
+            if (!existing.cpo_session_id) {
+                updateFields.cpo_session_id = session_id;
+            }
+
+            if (!isEmpty(updateFields)) {
+                stored = await prisma.session.update({
+                    where: { id: existing.id },
+                    data: updateFields,
+                });
+
+                logger.debug(`🟢 [${reqId}] Session UPDATED`, {
+                    data: { sessionId: stored.id },
+                });
+
+                // ✅ Trigger tracking
+                if (stored.authorization_reference) {
+                    TrackActionHandler.sendOnTrackToBAPONIX(
+                        stored.authorization_reference
+                    );
+                }
+            } 
             else {
-                // Create new session - only include fields present in payload
-                logger.debug(`🟡 [${reqId}] Building session create fields in handlePutSession`, { data: logData });
-                const sessionCreateFields = SessionService.buildSessionCreateFields(payload, partnerCredentials.partner_id);
-                stored = await prisma.session.create({
-                    data: sessionCreateFields,
-                });
-                logger.debug(`🟢 [${reqId}] Created new session in handlePutSession`, { 
-                    data: { logData, sessionId: stored.id } 
-                });
+                stored = existing;
             }
+        }
 
-            logger.debug(`🟡 [${reqId}] Mapping Prisma session to OCPI format in handlePutSession`, { data: logData });
-            const data =
-                OCPIv221SessionsModuleIncomingRequestService.mapPrismaSessionToOcpi(stored);
+        // =========================================================
+        // 🔥 STEP 4: CREATE NEW (ONLY IF NOTHING FOUND)
+        // =========================================================
+        else {
+            logger.debug(`🟡 [${reqId}] Creating NEW session`);
 
-            const response = {
-                httpStatus: 200,
-                payload: {
-                    data,
-                    status_code: OCPIResponseStatusCode.status_1000,
-                    timestamp: new Date().toISOString(),
-                },
-            };
+            const createFields = SessionService.buildSessionCreateFields(
+                payload,
+                partnerCredentials.partner_id
+            );
 
-            // Log outgoing response (non-blocking)
-            OCPIRequestLogService.logIncomingResponse({
-                req,
-                res,
-                responseBody: response.payload,
-                statusCode: response.httpStatus,
-                partnerId: partnerCredentials.partner_id,
-                command: OCPILogCommand.PutSessionRes,
-                session_id: stored.id,
-                authorization_reference: stored.authorization_reference || undefined,
-                cpo_session_id: stored.cpo_session_id || undefined,
+            // ✅ Ensure session_id is always set
+            createFields.cpo_session_id = session_id;
+
+            stored = await prisma.session.create({
+                data: createFields,
             });
 
-            logger.debug(`🟡 [${reqId}] Triggering auto cut-off check in handlePutSession`, { data: logData });
-            ChargingService.autoCutOffChargingSession(stored);
-
-            logger.debug(`🟢 [${reqId}] Returning PUT /sessions/:session_id response in handlePutSession`, { 
-                data: { logData, httpStatus: response.httpStatus } 
+            logger.debug(`🟢 [${reqId}] Session CREATED`, {
+                data: { sessionId: stored.id },
             });
+        }
 
-            return response;
-        }
-        catch (e: any) {
-            logger.error(`🔴 [${reqId}] Error in handlePutSession: ${e?.toString()}`, e, { data: logData });
-            throw e;
-        }
+        // =========================================================
+        // 🔁 RESPONSE
+        // =========================================================
+        const data =
+            OCPIv221SessionsModuleIncomingRequestService.mapPrismaSessionToOcpi(
+                stored
+            );
+
+        ChargingService.autoCutOffChargingSession(stored);
+
+        return {
+            httpStatus: 200,
+            payload: {
+                data,
+                status_code: OCPIResponseStatusCode.status_1000,
+                timestamp: new Date().toISOString(),
+            },
+        };
+    } 
+    catch (e: any) {
+        logger.error(`🔴 [${reqId}] Error in handlePutSession`, e, {
+            data: logData,
+        });
+        throw e;
     }
+}
 
     /**
      * PATCH /sessions/{country_code}/{party_id}/{session_id}
