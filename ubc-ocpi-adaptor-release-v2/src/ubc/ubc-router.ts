@@ -119,6 +119,7 @@ router.post(`/${BecknAction.support}/add`, ubcAuth, async (req: Request, res: Re
     handleRequest(req, res, next, SupportActionHandler.addSupportInformationToPartner)
 );
 
+
 router.post(`/${BecknAction.publish}`, ubcAuth, async (req: Request, res: Response, next: NextFunction) =>
     handleRequest(req, res, next, PublishActionHandler.handleBppPublishRequest)
 );
