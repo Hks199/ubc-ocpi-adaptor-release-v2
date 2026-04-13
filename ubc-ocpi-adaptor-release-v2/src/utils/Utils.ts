@@ -170,6 +170,10 @@ export default class Utils {
         return `${GLOBAL_VARS.BPP_URL}/bpp/receiver`;
     }
 
+    public static cds_url(): string {
+        return `${GLOBAL_VARS.CDS_BASE_URL}`;
+    }
+
     public static getBPPContext(params: {
         action: BecknAction,
         version: string,
