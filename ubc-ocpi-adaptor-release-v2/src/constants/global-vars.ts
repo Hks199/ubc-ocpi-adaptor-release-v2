@@ -1,8 +1,7 @@
 const GLOBAL_VARS = {
     // OCPI
     OCPI_HOST: process.env.OCPI_HOST || 'https://uat-bpp-opci-adaptor.ubc.nbsl.org.in',
-    PRIVATE_KEY: process.env.PRIVATE_KEY || '',
-    
+    PRIVATE_KEY: process.env.PRIVATE_KEY ? process.env.PRIVATE_KEY.replace(/\\n/g, '\n') : '',
     
     // UBC
     SHOULD_SIGN_CALLBACK_REQUESTS: process.env.SHOULD_SIGN_CALLBACK_REQUESTS || 'false',
