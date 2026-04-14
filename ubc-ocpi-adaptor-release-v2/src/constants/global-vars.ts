@@ -1,7 +1,7 @@
 const GLOBAL_VARS = {
     // OCPI
     OCPI_HOST: process.env.OCPI_HOST || 'https://uat-bpp-opci-adaptor.ubc.nbsl.org.in',
-    PRIVATE_KEY: process.env.PRIVATE_KEY ? process.env.PRIVATE_KEY.replace(/\\n/g, '\n') : '',
+    PRIVATE_KEY: process.env.PRIVATE_KEY || '',
     
     // UBC
     SHOULD_SIGN_CALLBACK_REQUESTS: process.env.SHOULD_SIGN_CALLBACK_REQUESTS || 'false',
@@ -11,7 +11,7 @@ const GLOBAL_VARS = {
     INTERNAL_PAYMENT_LINK_HOST: process.env.INTERNAL_PAYMENT_LINK_HOST || 'http://localhost:6001',
     ENABLE_CATALOG_PUBLISH: process.env.ENABLE_CATALOG_PUBLISH || 'false',
     BPP_URL: process.env.BPP_URL || 'https://uat-bpp-opci-adaptor.ubc.nbsl.org.in',
-    CDS_BASE_URL: process.env.CDS_BASE_URL || 'https://uat-cds.ubc.nbsl.org.in',
+    CDS_BASE_URL: process.env.CDS_BASE_URL || 'http://uat-cds.ubc.nbsl.org.in',
 };
 
 export default GLOBAL_VARS;

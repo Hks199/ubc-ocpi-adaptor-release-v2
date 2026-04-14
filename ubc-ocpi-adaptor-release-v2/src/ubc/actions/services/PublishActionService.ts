@@ -1194,8 +1194,7 @@ export default class PublishActionService {
      * This is the function called by getStitchedResponse
      */
     public static async sendPublishCallToBecknONIX(payload: UBCPublishRequestPayload): Promise<UBCPublishResponsePayload> {
-        // const bppHost = Utils.cds_url();
-        const bppHost = payload.context.bap_uri || Utils.cds_url();
+        const bppHost = Utils.cds_url();
         logger.debug(`🟡 Sending publish request to BPP ONIX`, { 
             url: `${bppHost}/${BecknAction.publish}`,
             transaction_id: payload.context.transaction_id 
