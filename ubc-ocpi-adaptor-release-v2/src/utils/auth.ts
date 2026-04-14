@@ -9,12 +9,38 @@ import { BecknDomain } from '../ubc/schema/v2.0.0/enums/BecknDomain';
 // import { base64_variants } from "libsodium-wrappers";
 import sodium from "libsodium-wrappers";
 
+// const signMessage = async (signingString: string, privateKey: string) => {
+//     await sodium.ready;
+
+//     const signedMessage = sodium.crypto_sign_detached(
+//         sodium.from_string(signingString),
+//         sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL)
+//     );
+
+//     return sodium.to_base64(
+//         signedMessage,
+//         sodium.base64_variants.ORIGINAL
+//     );
+// };
+
 const signMessage = async (signingString: string, privateKey: string) => {
     await sodium.ready;
 
+    const seed = sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL);
+
+    let keyToUse;
+
+    if (seed.length === 32) {
+        // convert seed → 64 byte key
+        keyToUse = sodium.crypto_sign_seed_keypair(seed).privateKey;
+    } 
+    else {
+        keyToUse = seed;
+    }
+
     const signedMessage = sodium.crypto_sign_detached(
         sodium.from_string(signingString),
-        sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL)
+        keyToUse
     );
 
     return sodium.to_base64(
