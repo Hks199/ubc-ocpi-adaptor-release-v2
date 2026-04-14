@@ -263,7 +263,7 @@ export default class ConfirmActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnConfirmCallToBecknONIX(payload: UBCOnConfirmRequestPayload): Promise<any> {
-        const bppHost = Utils.getBppUrl();
+        const bppHost = payload?.context?.bpp_uri || Utils.getBppUrl();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_confirm}`,

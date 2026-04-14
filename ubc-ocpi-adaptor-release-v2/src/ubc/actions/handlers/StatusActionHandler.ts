@@ -312,7 +312,7 @@ export default class StatusActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnStatusCallToBecknONIX(payload: UBCOnStatusRequestPayload): Promise<void> {
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = payload?.context?.bpp_uri || Utils.getBppUrl();
         await BppOnixRequestService.sendPostRequest({
             url: `${bppHost}/${BecknAction.on_status}`,
             data: payload,
