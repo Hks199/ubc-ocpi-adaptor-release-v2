@@ -171,7 +171,7 @@ export default class Utils {
     }
 
     public static cds_url(): string {
-        return `${GLOBAL_VARS.CDS_BASE_URL}/bpp/receiver`;
+        return `${GLOBAL_VARS.CDS_BASE_URL}`;
     }
 
     public static getBPPContext(params: {
