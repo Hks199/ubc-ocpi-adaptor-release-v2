@@ -176,7 +176,7 @@ export default class Utils {
             return `${GLOBAL_VARS.ONIX_BPP_PLUGIN_URL.replace(/\/+$/, '')}/bpp/caller`;
         }
 
-        return `${GLOBAL_VARS.CDS_BASE_URL}`.replace(/\/+$/, '');
+        return `${GLOBAL_VARS.CDS_BASE_URL}`.replace(/\/+$/, '') + '/bpp/caller';
     }
 
     /** CDS callback base + `/bpp/receiver`: public `BPP_URL` by default; optional `ONIX_BPP_PUBLIC_CALLBACK_URL` if ONIX is on another host. */

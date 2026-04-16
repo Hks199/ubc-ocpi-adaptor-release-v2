@@ -300,6 +300,33 @@ enum ConnectorType {
 }
 
 /**
+ * Maps OCPI/custom parking_type values to CDS-accepted parkingType enum values.
+ * CDS only accepts: OnStreet, OffStreet, Basement, Mall, FuelStation, Office, Hotel.
+ * Any value not in this map is omitted from the payload to avoid a 400 NACK.
+ */
+const parkingTypeMap: Record<string, string> = {
+    // Standard OCPI values
+    ON_STREET: 'OnStreet',
+    ALONG_MOTORWAY: 'OnStreet',
+    PARKING_GARAGE: 'OffStreet',
+    PARKING_LOT: 'OffStreet',
+    ON_DRIVEWAY: 'OffStreet',
+    UNDERGROUND_GARAGE: 'Basement',
+    // Non-standard / legacy values found in DB
+    PUBLIC: 'OffStreet',
+    PRIVATE: 'OffStreet',
+};
+
+/**
+ * Converts an OCPI or custom parking_type value to a CDS-accepted parkingType string.
+ * Returns undefined if no mapping exists (field will be omitted from the payload).
+ */
+function convertParkingType(ocpiParkingType: string | null | undefined): string | undefined {
+    if (!ocpiParkingType) return undefined;
+    return parkingTypeMap[ocpiParkingType.toUpperCase()];
+}
+
+/**
  * Maps OCPI connector standards to normal ConnectorType values
  * This is used when publishing to convert OCPI terms to standard connector types
  */
@@ -964,7 +991,8 @@ export default class PublishActionService {
 
         // Only include optional fields if they have values (avoid undefined in JSON)
         if (evse.uid) attributes.evseId = externalChargePointId;
-        if (location.parking_type) attributes.parkingType = location.parking_type;
+        const cdsParkingType = convertParkingType(location.parking_type);
+        if (cdsParkingType) attributes.parkingType = cdsParkingType;
         if (connector.power_type) attributes.powerType = this.getNormalizedPowerType(connector.power_type);
         if (connector.format) attributes.connectorFormat = connector.format;
 
