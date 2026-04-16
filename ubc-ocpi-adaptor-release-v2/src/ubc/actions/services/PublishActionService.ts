@@ -23,6 +23,7 @@ import { OCPIHours, OCPIRegularHours } from '../../../ocpi/schema/modules/locati
 import { EvseConnectorDbService } from '../../../db-services/EvseConnectorDbService';
 import { AppPublishResponsePayload } from '../../schema/v2.0.0/actions/publish/types/AppPublishResponsePayload';
 import { ISODateTime } from '../../../ocpi/schema/general/types';
+import { ParkingType } from '../../schema/v2.0.0/enums/ParkingType';
 
 /**
  * Map entry type for locations with EVSEs and connectors
@@ -888,6 +889,37 @@ export default class PublishActionService {
         return powerType;
     }
 
+    private static getNormalizedParkingType(parkingType?: string | null): ParkingType | undefined {
+        if (!parkingType) {
+            return undefined;
+        }
+
+        switch (parkingType.toUpperCase()) {
+        case 'ON_STREET':
+        case 'ALONG_MOTORWAY':
+        case 'PUBLIC':
+            return ParkingType.OnStreet;
+        case 'PARKING_GARAGE':
+        case 'UNDERGROUND_GARAGE':
+            return ParkingType.Basement;
+        case 'MALL':
+            return ParkingType.Mall;
+        case 'FUEL_STATION':
+        case 'FUELSTATION':
+            return ParkingType.FuelStation;
+        case 'OFFICE':
+            return ParkingType.Office;
+        case 'HOTEL':
+            return ParkingType.Hotel;
+        case 'PARKING_LOT':
+        case 'PARKING_TOP':
+        case 'ON_DRIVEWAY':
+        case 'PRIVATE':
+        default:
+            return ParkingType.OffStreet;
+        }
+    }
+
     /**
      * Max power (kW) for Beckn ChargingService: prefer OCPI max_electric_power (W), else estimate from V×A (W), else 1 kW minimum for validators/CDS.
      */
@@ -964,7 +996,8 @@ export default class PublishActionService {
 
         // Only include optional fields if they have values (avoid undefined in JSON)
         if (evse.uid) attributes.evseId = externalChargePointId;
-        if (location.parking_type) attributes.parkingType = location.parking_type;
+        const normalizedParkingType = this.getNormalizedParkingType(location.parking_type);
+        if (normalizedParkingType) attributes.parkingType = normalizedParkingType;
         if (connector.power_type) attributes.powerType = this.getNormalizedPowerType(connector.power_type);
         if (connector.format) attributes.connectorFormat = connector.format;
 
