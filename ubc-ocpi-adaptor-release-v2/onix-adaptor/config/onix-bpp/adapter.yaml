@@ -47,10 +47,10 @@ modules:
           config:
             networkParticipant: uat-bpp-opci-adapter.ubc.nbsl.org.in
             keyId: 76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH
-            signingPrivateKey: HH3KyEg4KhS8jVxPtEHMr6FTqyL0ef100vSPoZ2U0x4=
-            signingPublicKey: 2ja8jS4O/HhyfnTzgC81mXkNNAueeqGEhv42FJtoUv8=
-            encrPrivateKey: HH3KyEg4KhS8jVxPtEHMr6FTqyL0ef100vSPoZ2U0x4=
-            encrPublicKey: 2ja8jS4O/HhyfnTzgC81mXkNNAueeqGEhv42FJtoUv8=
+            signingPrivateKey: EQoV5BnFliUdoYvs1jvA+B0Y/Ae2EUvdMldUasLbqb0=
+            signingPublicKey: mmWTDIW17Hpmma/MS4tGhZZMb4DVBzj//zezIAJN+9k=
+            encrPrivateKey: IFjVaPDBlfgzIqxgQOFcUzoUacWOGgt4NnRZ91kFTng=
+            encrPublicKey: siU4GxSDZXunCX9BisipOK23chBUFZnM8vSPE3UdhG4=
         cache:
           id: cache
           config:
@@ -95,10 +95,10 @@ modules:
           config:
             networkParticipant: uat-bpp-opci-adapter.ubc.nbsl.org.in
             keyId: 76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH
-            signingPrivateKey: HH3KyEg4KhS8jVxPtEHMr6FTqyL0ef100vSPoZ2U0x4=
-            signingPublicKey: 2ja8jS4O/HhyfnTzgC81mXkNNAueeqGEhv42FJtoUv8=
-            encrPrivateKey: HH3KyEg4KhS8jVxPtEHMr6FTqyL0ef100vSPoZ2U0x4=
-            encrPublicKey: 2ja8jS4O/HhyfnTzgC81mXkNNAueeqGEhv42FJtoUv8=
+            signingPrivateKey: EQoV5BnFliUdoYvs1jvA+B0Y/Ae2EUvdMldUasLbqb0=
+            signingPublicKey: mmWTDIW17Hpmma/MS4tGhZZMb4DVBzj//zezIAJN+9k=
+            encrPrivateKey: IFjVaPDBlfgzIqxgQOFcUzoUacWOGgt4NnRZ91kFTng=
+            encrPublicKey: siU4GxSDZXunCX9BisipOK23chBUFZnM8vSPE3UdhG4=
         cache:
           id: cache
           config:

@@ -5,37 +5,29 @@ import { logger } from '../services/logger.service';
 import GLOBAL_VARS from '../constants/global-vars';
 import Utils from './Utils';
 import { BecknDomain } from '../ubc/schema/v2.0.0/enums/BecknDomain';
-// import * as _sodium from "libsodium-wrappers";
-// import { base64_variants } from "libsodium-wrappers";
 import sodium from "libsodium-wrappers";
-
-// const signMessage = async (signingString: string, privateKey: string) => {
-//     await sodium.ready;
-
-//     const signedMessage = sodium.crypto_sign_detached(
-//         sodium.from_string(signingString),
-//         sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL)
-//     );
-
-//     return sodium.to_base64(
-//         signedMessage,
-//         sodium.base64_variants.ORIGINAL
-//     );
-// };
 
 const signMessage = async (signingString: string, privateKey: string) => {
     await sodium.ready;
 
-    const seed = sodium.from_base64(privateKey, sodium.base64_variants.ORIGINAL);
+    const decodedKey = sodium.from_base64(
+        privateKey.trim(),
+        sodium.base64_variants.ORIGINAL
+    );
 
-    let keyToUse;
+    let keyToUse: Uint8Array;
 
-    if (seed.length === 32) {
-        // convert seed → 64 byte key
-        keyToUse = sodium.crypto_sign_seed_keypair(seed).privateKey;
-    } 
+    if (decodedKey.length === 32) {
+        // libsodium signs with a 64-byte Ed25519 secret key, so derive it from the 32-byte seed.
+        keyToUse = sodium.crypto_sign_seed_keypair(decodedKey).privateKey;
+    }
+    else if (decodedKey.length === 64) {
+        keyToUse = decodedKey;
+    }
     else {
-        keyToUse = seed;
+        throw new Error(
+            `Invalid Ed25519 private key length: expected 32-byte seed or 64-byte secret key, received ${decodedKey.length} bytes`
+        );
     }
 
     const signedMessage = sodium.crypto_sign_detached(
@@ -134,15 +126,3 @@ export function extractTokenFromHeader(authHeader?: string): string {
 
     return parts[1];
 }
-
-
-
-
-
-
-
-
-
-
-
-
