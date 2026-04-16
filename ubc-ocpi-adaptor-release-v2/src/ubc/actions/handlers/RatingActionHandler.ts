@@ -284,7 +284,7 @@ export default class RatingActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnRatingCallToBecknONIX(payload: UBCOnRatingRequestPayload): Promise<any> {
-        const bppHost = Utils.getBppUrl();
+        const bppHost = Utils.onix_bpp_caller_url();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_rating}`,

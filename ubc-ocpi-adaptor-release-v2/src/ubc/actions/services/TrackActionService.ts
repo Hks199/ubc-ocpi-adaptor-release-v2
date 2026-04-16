@@ -243,7 +243,7 @@ export default class TrackActionService {
         // Mirror the behaviour of Select/Init/Confirm handlers:
         // use configured BPP client host instead of raw bap_uri from context,
         // so local/dev DNS works consistently.
-        const bppHost = ubcOnTrackPayload.context?.bpp_uri || Utils.getBppUrl();
+        const bppHost = Utils.onix_bpp_caller_url();
         const url = `${bppHost}/${BecknAction.on_track}`;
 
         return BppOnixRequestService.sendPostRequest(
@@ -256,5 +256,4 @@ export default class TrackActionService {
         );
     }
 }
-
 

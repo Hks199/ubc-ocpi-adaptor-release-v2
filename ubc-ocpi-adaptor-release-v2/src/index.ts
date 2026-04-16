@@ -52,7 +52,7 @@ app.use('/ocpi', ocpiIncomingRoutes);
 app.use('/ocpi/cpo', ocpiOutgoingRoutes);
 
 app.use('/ubc', ubcRoutes);
- 
+
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/ocpi', adminOCPISetupRoutes);
 app.use('/api/admin/locations', adminLocationsRoutes);

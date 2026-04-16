@@ -560,6 +560,7 @@ export default class PublishActionService {
             timestamp: new Date().toISOString(),
             transaction_id: transaction_id,
             message_id: Utils.generateUUID(),
+            bpp_uri: Utils.publish_callback_url(),
         });
         
         // Build catalogs from the locations map (already filtered based on input)
@@ -870,6 +871,22 @@ export default class PublishActionService {
     }
 
     /**
+     * Max power (kW) for Beckn ChargingService: prefer OCPI max_electric_power (W), else estimate from V×A (W), else 1 kW minimum for validators/CDS.
+     */
+    private static computeMaxPowerKWFromConnector(connector: EVSEConnector): number {
+        const explicitW = connector.max_electric_power != null ? Number(connector.max_electric_power) : 0;
+        if (Number.isFinite(explicitW) && explicitW > 0) {
+            return explicitW / 1000;
+        }
+        const v = Number(connector.max_voltage);
+        const a = Number(connector.max_amperage);
+        if (Number.isFinite(v) && Number.isFinite(a) && v > 0 && a > 0) {
+            return (v * a) / 1000;
+        }
+        return 1;
+    }
+
+    /**
      * Builds item attributes for a single connector from database models
      * Item attributes contain connector-level information
      */
@@ -879,8 +896,8 @@ export default class PublishActionService {
         location: LocationWithRelations,
         connectorType: string
     ): BecknChargingServiceAttributes {
-        const maxPowerKW = connector.max_electric_power ? Number(connector.max_electric_power) / 1000 : 0; // Convert W to kW
         const minPowerKW = 1; // Minimum power is 1 kW
+        const maxPowerKW = Math.max(minPowerKW, this.computeMaxPowerKWFromConnector(connector));
 
         const { externalChargingStationId, externalChargePointId } = this.getExternalChargingStationAndChargePointId(connector);
 
@@ -1194,7 +1211,7 @@ export default class PublishActionService {
      * This is the function called by getStitchedResponse
      */
     public static async sendPublishCallToBecknONIX(payload: UBCPublishRequestPayload): Promise<UBCPublishResponsePayload> {
-        const bppHost = Utils.cds_url();
+        const bppHost = Utils.publish_gateway_url();
         logger.debug(`🟡 Sending publish request to BPP ONIX`, { 
             url: `${bppHost}/${BecknAction.publish}`,
             transaction_id: payload.context.transaction_id 
@@ -1278,5 +1295,3 @@ export default class PublishActionService {
         }
     }
 }
-
-

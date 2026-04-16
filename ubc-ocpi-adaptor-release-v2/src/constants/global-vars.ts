@@ -11,6 +11,8 @@ const GLOBAL_VARS = {
     INTERNAL_PAYMENT_LINK_HOST: process.env.INTERNAL_PAYMENT_LINK_HOST || 'http://localhost:6001',
     ENABLE_CATALOG_PUBLISH: process.env.ENABLE_CATALOG_PUBLISH || 'false',
     BPP_URL: process.env.BPP_URL || 'https://uat-bpp-opci-adaptor.ubc.nbsl.org.in',
+    ONIX_BPP_PUBLIC_CALLBACK_URL: process.env.ONIX_BPP_PUBLIC_CALLBACK_URL || '',
+    ONIX_BPP_PLUGIN_URL: process.env.ONIX_BPP_PLUGIN_URL || '',
     CDS_BASE_URL: process.env.CDS_BASE_URL || 'http://uat-cds.ubc.nbsl.org.in',
 };
 

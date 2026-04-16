@@ -475,7 +475,7 @@ export default class UpdateActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnUpdateCallToBecknONIX(payload: UBCOnUpdateRequestPayload): Promise<any> {
-        const bppHost = payload?.context?.bpp_uri || Utils.getBppUrl();
+        const bppHost = Utils.onix_bpp_caller_url();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_update}`,

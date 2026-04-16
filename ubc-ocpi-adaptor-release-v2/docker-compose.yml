@@ -15,6 +15,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production-min-32-characters}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
       - OCPI_HOST=${OCPI_HOST:-https://nearly-boss-pheasant.ngrok-free.app}
+      - BPP_URL=${BPP_URL:-https://uat-bpp-opci-adaptor.ubc.nbsl.org.in}
+      - ONIX_BPP_PLUGIN_URL=${ONIX_BPP_PLUGIN_URL:-http://onix-bpp-plugin:8002}
       - CDS_BASE_URL=${CDS_BASE_URL:-https://cds.example.com}
       - CDS_API_KEY=${CDS_API_KEY:-your-cds-api-key}
       - EV_CHARGING_UBC_BPP_ID=${EV_CHARGING_UBC_BPP_ID:-pulseenergy-ubc-local-bpp}
@@ -34,6 +36,40 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - ubc-network
+
+  redis-onix-bpp:
+    image: redis:alpine
+    container_name: redis-onix-bpp
+    ports:
+      - "6380:6379"
+    command: redis-server --requirepass your-redis-password
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "your-redis-password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ubc-network
+
+  onix-bpp-plugin:
+    image: manendrapalsingh/onix-adapter:v0.9.5
+    container_name: onix-bpp-plugin
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./onix-adaptor/config/onix-bpp:/app/config
+    environment:
+      - CONFIG_FILE=/app/config/adapter.yaml
+      - REDIS_PASSWORD=your-redis-password
+    depends_on:
+      app:
+        condition: service_started
+      redis-onix-bpp:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - ubc-network
 
@@ -64,5 +100,4 @@ volumes:
 networks:
   ubc-network:
     driver: bridge
-
 

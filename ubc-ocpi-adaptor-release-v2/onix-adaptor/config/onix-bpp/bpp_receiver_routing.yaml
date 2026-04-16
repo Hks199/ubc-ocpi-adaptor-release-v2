@@ -1,0 +1,18 @@
+routingRules:
+  - domain: beckn.one:deg:ev-charging
+    version: "2.0.0"
+    targetType: url
+    target:
+      url: http://ubc-ocpi-adaptor:6001/ubc
+      excludeAction: false
+    endpoints:
+      - select
+      - init
+      - confirm
+      - status
+      - track
+      - cancel
+      - update
+      - rating
+      - support
+      - on_catalog_publish

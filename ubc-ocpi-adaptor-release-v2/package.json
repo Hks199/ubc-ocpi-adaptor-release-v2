@@ -13,6 +13,7 @@
         "lint": "eslint src --ext .ts",
         "lint:fix": "eslint src --ext .ts --fix",
         "format": "node scripts/fix-braces.js",
+        "generate:onix-bpp-config": "node scripts/generate-onix-bpp-config.js",
         "format:check": "echo \"Prettier disabled\"",
         "prisma:generate": "prisma generate",
         "prisma:migrate": "prisma migrate dev",

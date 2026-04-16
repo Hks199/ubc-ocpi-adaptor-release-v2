@@ -158,8 +158,9 @@ export default class Utils {
         return GLOBAL_VARS.EV_CHARGING_UBC_UNIQUE_ID;
     }
 
+    /** Public BPP `/bpp/receiver` for catalogs; same base as {@link bpp_url} (BPP_URL), not EV_CHARGING_UBC_BPP_CLIENT_HOST. */
     public static getBppUri(): string {
-        return `${GLOBAL_VARS.EV_CHARGING_UBC_BPP_CLIENT_HOST}/bpp/receiver`;
+        return this.bpp_url();
     }
 
     public static getBppUrl(): string {
@@ -168,6 +169,31 @@ export default class Utils {
 
     public static bpp_url(): string {
         return `${GLOBAL_VARS.BPP_URL}/bpp/receiver`;
+    }
+
+    public static publish_gateway_url(): string {
+        if (GLOBAL_VARS.ONIX_BPP_PLUGIN_URL) {
+            return `${GLOBAL_VARS.ONIX_BPP_PLUGIN_URL.replace(/\/+$/, '')}/bpp/caller`;
+        }
+
+        return `${GLOBAL_VARS.CDS_BASE_URL}`.replace(/\/+$/, '');
+    }
+
+    /** CDS callback base + `/bpp/receiver`: public `BPP_URL` by default; optional `ONIX_BPP_PUBLIC_CALLBACK_URL` if ONIX is on another host. */
+    public static publish_callback_url(): string {
+        const publicOnix = GLOBAL_VARS.ONIX_BPP_PUBLIC_CALLBACK_URL?.replace(/\/+$/, '');
+        if (publicOnix) {
+            return `${publicOnix}/bpp/receiver`;
+        }
+        return this.bpp_url();
+    }
+
+    public static onix_bpp_caller_url(): string {
+        if (GLOBAL_VARS.ONIX_BPP_PLUGIN_URL) {
+            return `${GLOBAL_VARS.ONIX_BPP_PLUGIN_URL.replace(/\/+$/, '')}/bpp/caller`;
+        }
+
+        return this.getBppUrl();
     }
 
     public static cds_url(): string {
@@ -192,8 +218,8 @@ export default class Utils {
             domain: domain,
             action: action,
             version: version,
-            bpp_id: this.getBppId(),
-            bpp_uri: this.bpp_url(),
+            bpp_id: bpp_id || this.getBppId(),
+            bpp_uri: bpp_uri || this.bpp_url(),
             transaction_id: transaction_id,
             message_id: message_id,
             timestamp: timestamp ?? new Date().toISOString(),

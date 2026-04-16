@@ -317,7 +317,7 @@ export default class SelectActionHandler {
      * Internet <- BPP's beckn-ONIX <- BPP's provider (CPO)
      */
     static async sendOnSelectCallToBecknONIX(payload: UBCOnSelectRequestPayload): Promise<any> {
-        const bppHost = payload?.context?.bpp_uri || Utils.getBppUrl();
+        const bppHost = Utils.onix_bpp_caller_url();
         return await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_select}`,
