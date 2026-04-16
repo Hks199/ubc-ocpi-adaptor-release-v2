@@ -52,6 +52,8 @@ app.use('/ocpi', ocpiIncomingRoutes);
 app.use('/ocpi/cpo', ocpiOutgoingRoutes);
 
 app.use('/ubc', ubcRoutes);
+// UAT: CDS may POST to BPP_URL + "/bpp/receiver/on_catalog_publish" when ingress sends that path to this app (same handlers as /ubc).
+app.use('/bpp/receiver', ubcRoutes);
 
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/ocpi', adminOCPISetupRoutes);

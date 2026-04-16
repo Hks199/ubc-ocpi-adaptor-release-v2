@@ -9,7 +9,11 @@ export type PostAppPublishRequestPayload = {
     ocpi_location_ids?: string[];
     /** Array of EVSE IDs (uid) - mutually exclusive with ocpi_location_ids, connector_ids, partner_id */
     evse_ids?: string[];
-    /** Array of Connector IDs - mutually exclusive with ocpi_location_ids, evse_ids, partner_id */
+    /**
+     * Per-connector publish filter. Each value may match `evse_connector.id` (UUID),
+     * `beckn_connector_id` (e.g. IND*…), or OCPI `connector_id` for that EVSE (may match multiple EVSEs).
+     * Mutually exclusive with ocpi_location_ids, evse_ids, partner_id.
+     */
     connector_ids?: string[];
     /** Partner ID - fetch all locations for this partner - mutually exclusive with ocpi_location_ids, evse_ids, connector_ids */
     partner_id?: string;

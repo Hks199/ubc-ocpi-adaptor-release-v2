@@ -7,6 +7,7 @@ import PublishActionService from '../services/PublishActionService';
 import RequestsStoreService from '../../../utils/RequestsStoreService';
 import { UBCPublishRequestPayload } from '../../schema/v2.0.0/actions/publish/types/PublishPayload';
 import Utils from '../../../utils/Utils';
+import { axiosUpstreamErrorMeta } from '../../../utils/axiosUpstreamErrorMeta';
 import { databaseService } from '../../../services/database.service';
 
 /** Batch size for processing locations */
@@ -246,6 +247,7 @@ export default class PublishActionHandler {
                 e,
                 {
                     data: logData,
+                    ...axiosUpstreamErrorMeta(e),
                 }
             );
             throw e;
@@ -291,6 +293,7 @@ export default class PublishActionHandler {
                 e,
                 {
                     data: logData,
+                    ...axiosUpstreamErrorMeta(e),
                 }
             );
             throw e;

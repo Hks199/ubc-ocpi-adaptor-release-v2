@@ -9,21 +9,22 @@ services:
     env_file:
       - .env
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      # Defaults match UAT; override via .env for local (e.g. NODE_ENV=development, DATABASE_URL).
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=6001
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production-min-32-characters}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
-      - OCPI_HOST=${OCPI_HOST:-https://nearly-boss-pheasant.ngrok-free.app}
-      - BPP_URL=${BPP_URL:-https://uat-bpp-opci-adaptor.ubc.nbsl.org.in}
+      - OCPI_HOST=${OCPI_HOST:-https://uat-bpp-opci-adapter.ubc.nbsl.org.in}
+      - BPP_URL=${BPP_URL:-https://uat-bpp-opci-adapter.ubc.nbsl.org.in}
       - ONIX_BPP_PLUGIN_URL=${ONIX_BPP_PLUGIN_URL:-http://onix-bpp-plugin:8002}
-      - CDS_BASE_URL=${CDS_BASE_URL:-https://cds.example.com}
+      - CDS_BASE_URL=${CDS_BASE_URL:-https://uat-cds.ubc.nbsl.org.in/cds}
       - CDS_API_KEY=${CDS_API_KEY:-your-cds-api-key}
-      - EV_CHARGING_UBC_BPP_ID=${EV_CHARGING_UBC_BPP_ID:-pulseenergy-ubc-local-bpp}
-      - EV_CHARGING_UBC_UNIQUE_ID=${EV_CHARGING_UBC_UNIQUE_ID:-76EU7ncBX74BMNTQJMcMYoTMSzU7k71owUF53fN4jdxmosxZrdjdDk}
+      - EV_CHARGING_UBC_BPP_ID=${EV_CHARGING_UBC_BPP_ID:-uat-bpp-opci-adapter.ubc.nbsl.org.in}
+      - EV_CHARGING_UBC_UNIQUE_ID=${EV_CHARGING_UBC_UNIQUE_ID:-76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH}
       - EV_CHARGING_UBC_BPP_CLIENT_HOST=${EV_CHARGING_UBC_BPP_CLIENT_HOST:-http://host.docker.internal:7082}
       - PRIVATE_KEY=${PRIVATE_KEY:-}
-      - SHOULD_SIGN_CALLBACK_REQUESTS=${SHOULD_SIGN_CALLBACK_REQUESTS:-false}
+      - SHOULD_SIGN_CALLBACK_REQUESTS=${SHOULD_SIGN_CALLBACK_REQUESTS:-true}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CLOUD_PROVIDER=${CLOUD_PROVIDER:-local}
     depends_on:

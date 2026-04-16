@@ -8,7 +8,7 @@ export const appConfig = {
     jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production-min-32-characters',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
     cds: {
-        baseUrl: process.env.CDS_BASE_URL || 'https://cds.example.com',
+        baseUrl: process.env.CDS_BASE_URL || 'https://uat-cds.ubc.nbsl.org.in/cds',
         apiKey: process.env.CDS_API_KEY || 'your-cds-api-key',
     },
 };

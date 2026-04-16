@@ -1,0 +1,7 @@
+{
+  "ocpi_location_ids": [
+    "REPLACE_WITH_ocpi_location_id_from_location_table"
+  ],
+  "accepted_payment_methods": ["UPI", "CREDIT_CARD", "WALLET"],
+  "isActive": true
+}

@@ -1,0 +1,7 @@
+{
+  "evse_ids": [
+    "REPLACE_ME_use_evse_uid_column_OCPI_EVSE_uid"
+  ],
+  "accepted_payment_methods": ["UPI", "BANK_TRANSFER"],
+  "isActive": true
+}

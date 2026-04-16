@@ -18,6 +18,7 @@ import { TariffDbService, TariffWithRelations } from '../../../db-services/Tarif
 import { EVSEConnector, Location, EVSE, OCPIPartner, Prisma } from '@prisma/client';
 import { databaseService } from '../../../services/database.service';
 import GLOBAL_VARS from '../../../constants/global-vars';
+import { ValidationError } from '../../../utils/errors';
 import { OCPIHours, OCPIRegularHours } from '../../../ocpi/schema/modules/locations/types';
 import { EvseConnectorDbService } from '../../../db-services/EvseConnectorDbService';
 import { AppPublishResponsePayload } from '../../schema/v2.0.0/actions/publish/types/AppPublishResponsePayload';
@@ -776,13 +777,16 @@ export default class PublishActionService {
 
         // Case 4: Fetch by connector_ids - only include those specific connectors
         if (payload.connector_ids && payload.connector_ids.length > 0) {
-            // Fetch connectors with their EVSE and location
+            const requestedIds = payload.connector_ids;
+            // Match internal row id, Beckn connector id, or OCPI connector_id (per-evse; may return multiple rows for same OCPI id on different EVSEs)
             const connectors = await databaseService.prisma.eVSEConnector.findMany({
                 where: {
-                    id: {
-                        in: payload.connector_ids,
-                    },
                     deleted: false,
+                    OR: [
+                        { id: { in: requestedIds } },
+                        { beckn_connector_id: { in: requestedIds } },
+                        { connector_id: { in: requestedIds } },
+                    ],
                 },
                 include: {
                     evse: {
@@ -797,15 +801,29 @@ export default class PublishActionService {
                 },
             });
 
-            if (connectors.length === 0) {
-                throw new Error(`No connectors found for provided connector_ids: ${payload.connector_ids.join(', ')}`);
+            const rowMatchesRequestedId = (c: EVSEConnector, rid: string) =>
+                c.id === rid || c.beckn_connector_id === rid || c.connector_id === rid;
+
+            const matchedRequested = new Set<string>();
+            for (const c of connectors) {
+                for (const rid of requestedIds) {
+                    if (rowMatchesRequestedId(c, rid)) {
+                        matchedRequested.add(rid);
+                    }
+                }
             }
 
-            // Check if all requested connectors were found
-            const foundConnectorIds = new Set(connectors.map(c => c.connector_id));
-            const missingConnectorIds = payload.connector_ids.filter(id => !foundConnectorIds.has(id));
-            if (missingConnectorIds.length > 0) {
-                logger.warn(`Some connectors not found: ${missingConnectorIds.join(', ')}`);
+            const unmatchedRequested = requestedIds.filter(rid => !matchedRequested.has(rid));
+
+            if (connectors.length === 0 || matchedRequested.size === 0) {
+                throw new ValidationError(
+                    `No connectors found for connector_ids: ${requestedIds.join(', ')}. ` +
+                    'Use evse_connector.id (UUID), beckn_connector_id (IND*…), or OCPI connector_id as stored for that EVSE.',
+                );
+            }
+
+            if (unmatchedRequested.length > 0) {
+                logger.warn(`Some connector_ids had no matching row: ${unmatchedRequested.join(', ')}`);
             }
 
             // Build map with only the requested connectors
@@ -1102,11 +1120,19 @@ export default class PublishActionService {
                     let priceValue = 0;
                     const tariffElements = ocpiTariff.elements || [];
                     if (tariffElements.length > 0) {
-                        // Get first price component (usually energy price)
-                        const firstElement = tariffElements[0];
-                        if (firstElement.price_components && firstElement.price_components.length > 0) {
-                            priceValue = firstElement.price_components[0].price || 0;
+                        // Prefer first ENERGY component, else first component (CDS often rejects 0)
+                        for (const el of tariffElements) {
+                            const pcs = el.price_components || [];
+                            const energy = pcs.find((p) => p.type === 'ENERGY');
+                            const pick = energy ?? pcs[0];
+                            if (pick && typeof pick.price === 'number' && pick.price > 0) {
+                                priceValue = pick.price;
+                                break;
+                            }
                         }
+                    }
+                    if (priceValue === 0 && ocpiTariff.min_price?.excl_vat != null && ocpiTariff.min_price.excl_vat > 0) {
+                        priceValue = ocpiTariff.min_price.excl_vat;
                     }
 
                     // Determine validity dates - ensure ISO 8601 datetime format with timezone
@@ -1126,11 +1152,13 @@ export default class PublishActionService {
                         endDate = this.formatValidityDate(defaultEnd, false);
                     }
 
+                    // One catalog per connector; offer id must be unique within catalog_publish (shared OCPI tariff id is not)
+                    const offerBecknId = `${tariff.ocpi_tariff_id}*${becknConnectorId}`;
                     const offer: BecknCatalogOffer = {
                         "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
                         "beckn:provider": `${partner.country_code}*${partner.party_id}`,
                         "@type": ObjectType.offer,
-                        "beckn:id": tariff.ocpi_tariff_id,
+                        "beckn:id": offerBecknId,
                         "beckn:descriptor": {
                             "@type": ObjectType.descriptor,
                             "schema:name": `Tariff ${tariff.ocpi_tariff_id}`,

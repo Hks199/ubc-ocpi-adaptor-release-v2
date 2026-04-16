@@ -1,9 +1,11 @@
+# ONIX forwards incoming BPP traffic (e.g. on_catalog_publish from CDS) to the Node adaptor.
+# Docker Compose: use service name `app` (reliable DNS). Kubernetes UAT: replace with your adaptor Service URL, e.g. http://ubc-ocpi-adaptor.<ns>.svc.cluster.local:6001/ubc
 routingRules:
   - domain: beckn.one:deg:ev-charging
     version: "2.0.0"
     targetType: url
     target:
-      url: http://ubc-ocpi-adaptor:6001/ubc
+      url: http://app:6001/ubc
       excludeAction: false
     endpoints:
       - select

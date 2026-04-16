@@ -1,5 +1,6 @@
 import REQUESTS_STORE from './requests-store';
 import { logger } from '../services/logger.service';
+import { axiosUpstreamErrorMeta } from './axiosUpstreamErrorMeta';
 
 /**
  * Service for managing the global requests store
@@ -66,8 +67,9 @@ export default class RequestsStoreService {
                             resolve(value);
                         },
                         reject: (error: Error) => {
-                            logger.error(`🔴 [${reqId}] Rejecting stitched response in getStitchedResponse`, error, { 
-                                message: error.message
+                            logger.error(`🔴 [${reqId}] Rejecting stitched response in getStitchedResponse`, error, {
+                                message: error.message,
+                                ...axiosUpstreamErrorMeta(error),
                             });
                             clearTimeout(timeoutHandle);
                             delete REQUESTS_STORE[reqId];
@@ -97,8 +99,9 @@ export default class RequestsStoreService {
                         // If ACK, wait for callback to resolve the promise
                     })
                     .catch((error) => {
-                        logger.error(`🔴 [${reqId}] Error in initial request in getStitchedResponse`, error, { 
-                            message: 'Request failed'
+                        logger.error(`🔴 [${reqId}] Error in initial request in getStitchedResponse`, error, {
+                            message: 'Request failed',
+                            ...axiosUpstreamErrorMeta(error),
                         });
                         // Clean up and reject on request failure
                         if (REQUESTS_STORE[reqId]?.resolver) {

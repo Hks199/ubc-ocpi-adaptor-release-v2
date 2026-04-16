@@ -1,0 +1,7 @@
+{
+  "connector_ids": [
+    "REPLACE_ME_use_evse_connector_table_id_or_beckn_connector_id_or_ocpi_connector_id"
+  ],
+  "accepted_payment_methods": ["UPI", "CREDIT_CARD", "WALLET"],
+  "isActive": true
+}

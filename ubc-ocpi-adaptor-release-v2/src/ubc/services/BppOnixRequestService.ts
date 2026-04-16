@@ -6,6 +6,7 @@ import BecknLoggingService from "./BecknLoggingService";
 import Utils from "../../utils/Utils";
 import GLOBAL_VARS from "../../constants/global-vars";
 import { createAuthorizationHeader } from "../../utils/auth";
+import { axiosUpstreamErrorMeta } from "../../utils/axiosUpstreamErrorMeta";
 // import { response } from "express";
 
 // Used to send requests to the BAP's beckn-provider
@@ -82,9 +83,16 @@ export default class BppOnixRequestService {
                     return response.data;
                 })
                 .catch((e: any) => {
-                    logger.error(`🔴 [${reqId}] Error in BppOnixRequestService.sendPostRequest: ${e?.toString()}`, e, {
-                        data: logData,
-                    });
+                    const status = e?.response?.status;
+                    logger.error(
+                        `🔴 [${reqId}] Error in BppOnixRequestService.sendPostRequest: ${e?.toString()}` +
+                            (status != null ? ` status=${status}` : ""),
+                        e,
+                        {
+                            requestUrl: url,
+                            ...axiosUpstreamErrorMeta(e),
+                        },
+                    );
 
                     return Promise.reject(e);
                 });

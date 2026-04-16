@@ -1,0 +1,9 @@
+{
+  "connector_ids": [
+    "ac97061e-5ab4-4995-9aad-a5c7b493a61d",
+    "7b488329-eba3-4e05-af49-b311758bd8f3",
+    "4acb5d26-b369-4e50-9e0c-b7c6585bb2ca"
+  ],
+  "accepted_payment_methods": ["UPI", "CREDIT_CARD", "WALLET"],
+  "isActive": true
+}

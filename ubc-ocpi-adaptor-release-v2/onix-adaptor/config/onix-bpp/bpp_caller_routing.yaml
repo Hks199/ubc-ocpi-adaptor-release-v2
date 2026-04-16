@@ -1,3 +1,9 @@
+# UAT CDS (https). ONIX appends the action path, e.g. target + "/catalog_publish" → full URL:
+#   https://uat-cds.ubc.nbsl.org.in/cds/catalog_publish
+# Other documented UAT endpoints (reference):
+#   https://uat-cds.ubc.nbsl.org.in/cds/discover
+#   https://uat-cds.ubc.nbsl.org.in/cds/on_discover
+#   https://uat-cds.ubc.nbsl.org.in/cds/actuator/health
 routingRules:
   - domain: beckn.one:deg:ev-charging
     version: "2.0.0"

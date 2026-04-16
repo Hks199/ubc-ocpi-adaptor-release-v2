@@ -32,8 +32,9 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install production dependencies only
+# Install production dependencies + Prisma CLI (devDependency only) so migrate deploy runs at container start
 RUN npm ci --only=production && \
+    npm install prisma@6.19.0 --no-save && \
     npm cache clean --force
 
 # Copy built application from builder
@@ -41,8 +42,11 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+
 # Change ownership to non-root user
-RUN chown -R nodejs:nodejs /app
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chown -R nodejs:nodejs /app
 
 # Switch to non-root user
 USER nodejs
@@ -50,10 +54,9 @@ USER nodejs
 # Expose port (matching app.config.ts default)
 EXPOSE 6001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check (allow time for migrate deploy on first boot)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:6001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 

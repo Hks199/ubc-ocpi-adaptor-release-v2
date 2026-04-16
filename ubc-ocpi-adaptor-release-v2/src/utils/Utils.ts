@@ -158,9 +158,9 @@ export default class Utils {
         return GLOBAL_VARS.EV_CHARGING_UBC_UNIQUE_ID;
     }
 
-    /** Public BPP `/bpp/receiver` for catalogs; same base as {@link bpp_url} (BPP_URL), not EV_CHARGING_UBC_BPP_CLIENT_HOST. */
+    /** Public BPP `/bpp/receiver` for catalogs — same base as {@link publish_callback_url} so CDS sees the same bpp_uri as in context. */
     public static getBppUri(): string {
-        return this.bpp_url();
+        return this.publish_callback_url();
     }
 
     public static getBppUrl(): string {

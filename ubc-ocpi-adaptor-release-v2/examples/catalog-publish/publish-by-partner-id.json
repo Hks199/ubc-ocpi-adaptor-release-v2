@@ -1,0 +1,5 @@
+{
+  "partner_id": "REPLACE_WITH_ocpi_partner_id_string",
+  "accepted_payment_methods": ["UPI", "WALLET"],
+  "isActive": true
+}
