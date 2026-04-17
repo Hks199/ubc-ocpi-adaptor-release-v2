@@ -13,7 +13,7 @@ function bppHostnameFromUrl(url: string): string {
 const GLOBAL_VARS = {
     // OCPI
     OCPI_HOST: process.env.OCPI_HOST || 'https://uat-bpp-opci-adapter.ubc.nbsl.org.in',
-    PRIVATE_KEY: process.env.PRIVATE_KEY || '',
+    PRIVATE_KEY: process.env.PRIVATE_KEY || 'EQoV5BnFliUdoYvs1jvA+B0Y/Ae2EUvdMldUasLbqb0=',
     
     // UBC — bpp_id should match MOCK_BPP subscriber_id and ONIX adapter.yaml networkParticipant
     SHOULD_SIGN_CALLBACK_REQUESTS: process.env.SHOULD_SIGN_CALLBACK_REQUESTS || 'false',
