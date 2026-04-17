@@ -68,7 +68,7 @@ app.use('/api/app', appRoutes);
 // Root endpoint
 app.get('/', (req: Request, res: Response) => {
     res.json({
-        name: 'UBC OCPI Adaptor',
+        name: 'UBC OCPI Adaptor Base Url Running perfectly',
         version: '1.0.0',
         status: 'running',
     });
