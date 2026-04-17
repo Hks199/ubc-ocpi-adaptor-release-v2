@@ -24,7 +24,7 @@ const GLOBAL_VARS = {
     ENABLE_CATALOG_PUBLISH: process.env.ENABLE_CATALOG_PUBLISH || 'false',
     BPP_URL,
     ONIX_BPP_PUBLIC_CALLBACK_URL: process.env.ONIX_BPP_PUBLIC_CALLBACK_URL || '',
-    ONIX_BPP_PLUGIN_URL: process.env.ONIX_BPP_PLUGIN_URL || '',
+    ONIX_BPP_PLUGIN_URL: process.env.ONIX_BPP_PLUGIN_URL || 'https://uat-bpp-onix.ubc.nbsl.org.in',
     CDS_BASE_URL: process.env.CDS_BASE_URL || 'https://uat-cds.ubc.nbsl.org.in/cds',
 };
 
