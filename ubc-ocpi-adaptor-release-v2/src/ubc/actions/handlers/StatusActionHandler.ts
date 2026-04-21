@@ -21,6 +21,8 @@ import { LocationDbService } from '../../../db-services/LocationDbService';
 import { OCPIStatusMapper } from '../../utils/OCPIStatusMapper';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
 import { mapGenericToBecknStatus } from '../../services/PaymentServices/Razorpay/RazorpayPaymentService';
+import { SessionDbService } from '../../../db-services/SessionDbService';
+import { ChargingSessionStatus } from '../../schema/v2.0.0/enums/ChargingSessionStatus';
 
 /**
  * Handler for status action (BAP → BPP request-response)
@@ -260,30 +262,48 @@ export default class StatusActionHandler {
                 logger.warn(`🟡 Could not fetch connector status from EVSE for ${orderedItem}, using fallback`, {
                     data: { error: e?.message }
                 });
-                // Fallback to AVAILABLE so status doesn't fail completely
                 connectorStatus = connectorStatus || 'AVAILABLE';
             }
         }
-        else {
-            // If no orderedItem, use default from status request
-            logger.debug(`🟡 No orderedItem found, using connectorStatus from status request`, {
-                data: { connectorStatus }
-            });
+
+        // Fetch actual session status from DB using authorization_reference (beckn:txnRef)
+        const txnRef = statusPayment['beckn:txnRef'] as string | undefined;
+        let actualSessionStatus: string = (deliveryAttributes['sessionStatus'] as string) || ChargingSessionStatus.PENDING;
+        let orderStatus: OrderStatus = OrderStatus.PENDING;
+
+        if (txnRef) {
+            try {
+                const session = await SessionDbService.getByAuthorizationReference(txnRef);
+                if (session) {
+                    actualSessionStatus = session.status ?? ChargingSessionStatus.PENDING;
+                    // Derive orderStatus from session state
+                    if (session.status === ChargingSessionStatus.ACTIVE) {
+                        orderStatus = OrderStatus.INPROGRESS;
+                    } else if (session.status === ChargingSessionStatus.COMPLETED) {
+                        orderStatus = OrderStatus.COMPLETED;
+                    } else if (session.status === ChargingSessionStatus.INTERRUPTED) {
+                        orderStatus = OrderStatus.CANCELLED;
+                    } else {
+                        orderStatus = OrderStatus.PENDING;
+                    }
+                }
+            }
+            catch (e: any) {
+                logger.warn(`🟡 Could not fetch session for txnRef=${txnRef}, using fallback status`, {
+                    data: { error: e?.message }
+                });
+            }
         }
 
-        // Update deliveryAttributes with actual connectorStatus from EVSE
-        // Per schema line 2096-2103: deliveryAttributes must have @context, @type, and connectorStatus
+        // Build deliveryAttributes with actual values from DB
         const updatedDeliveryAttributes = {
             "@context": deliveryAttributes['@context'] || "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld",
             "@type": deliveryAttributes['@type'] || "ChargingSession",
             ...deliveryAttributes,
             connectorStatus: connectorStatus || deliveryAttributes['connectorStatus'] || 'PREPARING',
-            // Ensure sessionStatus is present
-            sessionStatus: deliveryAttributes['sessionStatus'] || 'PENDING',
+            sessionStatus: actualSessionStatus,
         };
 
-        // Update fulfillment with updated deliveryAttributes
-        // Per schema line 2091-2104: fulfillment must always be included with proper structure
         const updatedFulfillment = {
             "@context": statusFulfillment?.['@context'] || "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
             "@type": statusFulfillment?.['@type'] || "beckn:Fulfillment",
@@ -293,22 +313,20 @@ export default class StatusActionHandler {
             'beckn:deliveryAttributes': updatedDeliveryAttributes,
         };
 
-        // Per spec: on_status response to status request MUST include fulfillment with charging session details
-        // Reference: lines 2091-2104 in UBC spec
         const ubcOnStatusPayload: UBCOnStatusRequestPayload = {
             context: context,
             message: {
                 order: {
                     "@context": statusOrder['@context'],
                     "@type": ObjectType.order,
-                    "beckn:id": statusOrder['beckn:id'], // from status request
-                    "beckn:orderStatus": OrderStatus.PENDING, // explicitly set to PENDING per schema
-                    "beckn:seller": statusOrder['beckn:seller'], // from status request
-                    "beckn:buyer": statusOrder['beckn:buyer'], // from status request
-                    "beckn:orderItems": orderItems as any, // simplified per schema (only orderedItem)
-                    "beckn:orderValue": statusOrder['beckn:orderValue'] as any, // from status request
-                    "beckn:fulfillment": updatedFulfillment as any, // Include fulfillment with actual connectorStatus from EVSE
-                    "beckn:payment": paymentObject as BecknPayment, // only necessary fields per schema
+                    "beckn:id": statusOrder['beckn:id'],
+                    "beckn:orderStatus": orderStatus,
+                    "beckn:seller": statusOrder['beckn:seller'],
+                    "beckn:buyer": statusOrder['beckn:buyer'],
+                    "beckn:orderItems": orderItems as any,
+                    "beckn:orderValue": statusOrder['beckn:orderValue'] as any,
+                    "beckn:fulfillment": updatedFulfillment as any,
+                    "beckn:payment": paymentObject as BecknPayment,
                 },
             },
         };

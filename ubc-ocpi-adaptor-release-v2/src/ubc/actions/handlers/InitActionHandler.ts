@@ -408,22 +408,30 @@ export default class InitActionHandler {
 
         let paymentLink = '';
         if (beneficiary === 'BPP') {
-            const generatePaymentLinkResponse =
-            await InitActionHandler.generatePaymentLink(
-                {
-                    amount: finalAmount,
-                    authorization_reference: authorizationReference,
-                },
-                paymentTxn,
-                payload?.payload?.buyer_details as BuyerDetails
-            );
+            try {
+                const generatePaymentLinkResponse = await InitActionHandler.generatePaymentLink(
+                    {
+                        amount: finalAmount,
+                        authorization_reference: authorizationReference,
+                    },
+                    paymentTxn,
+                    payload?.payload?.buyer_details as BuyerDetails
+                );
 
-            PaymentTxnDbService.update(paymentTxn.id, {
-                payment_link: generatePaymentLinkResponse.payment_link,
-                authorization_reference: generatePaymentLinkResponse.authorization_reference,
-            });
+                PaymentTxnDbService.update(paymentTxn.id, {
+                    payment_link: generatePaymentLinkResponse.payment_link,
+                    authorization_reference: generatePaymentLinkResponse.authorization_reference,
+                });
 
-            paymentLink = generatePaymentLinkResponse.payment_link;
+                paymentLink = generatePaymentLinkResponse.payment_link;
+            }
+            catch (e: any) {
+                logger.warn(
+                    `🟡 Payment link generation failed for partner ${evseConnector.partner_id}, proceeding with empty paymentURL: ${e?.message}`,
+                    { data: { partner_id: evseConnector.partner_id, authorization_reference: authorizationReference } }
+                );
+                // paymentLink stays '' — on_init still goes out; confirm returns CONFIRMED on PENDING payment
+            }
         }
 
         const extractedOnInitResponseBody: ExtractedOnInitResponseBody = {

@@ -295,12 +295,24 @@ export default class OnStatusActionHandler {
                 throw new Error('No existing on_init response found');
             }
 
-            // Update payment status in database
-            await PaymentTxnDbService.update(paymentTxn.id, {
-                status: payment_status,
-            });
+            // Convert BecknPaymentStatus → GenericPaymentTxnStatus before writing to DB
+            const becknToGenericMap: Record<string, GenericPaymentTxnStatus> = {
+                [BecknPaymentStatus.COMPLETED]: GenericPaymentTxnStatus.Success,
+                [BecknPaymentStatus.PENDING]: GenericPaymentTxnStatus.Pending,
+                [BecknPaymentStatus.FAILED]: GenericPaymentTxnStatus.Failed,
+                [BecknPaymentStatus.REFUNDED]: GenericPaymentTxnStatus.Refunded,
+            };
+            const genericStatus = becknToGenericMap[payment_status] ?? (payment_status as unknown as GenericPaymentTxnStatus);
 
-            logger.debug(`🟡 [${authorization_reference}] Updated payment status to`, { paymentTxnId: paymentTxn.id, payment_status });
+            // Only update if DB hasn't already been set to target status (webhook handler may have already updated it)
+            if (paymentTxn.status !== genericStatus) {
+                await PaymentTxnDbService.update(paymentTxn.id, {
+                    status: genericStatus,
+                });
+                logger.debug(`🟡 [${authorization_reference}] Updated payment status to`, { paymentTxnId: paymentTxn.id, genericStatus });
+            } else {
+                logger.debug(`🟡 [${authorization_reference}] Payment status already at target, skipping DB update`, { paymentTxnId: paymentTxn.id, genericStatus });
+            }
 
             const becknPaymentStatus = payment_status as BecknPaymentStatus;
             if (!becknPaymentStatus) {
