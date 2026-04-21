@@ -25,11 +25,11 @@ import { UBCChargingMethod } from '../../schema/v2.0.0/enums/UBCChargingMethod';
 import CPOBackendRequestService from '../../services/CPOBackendRequestService';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
 import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
+import { GenericPaymentTxnStatus } from '../../../types/Payment';
 import { LocationDbService } from '../../../db-services/LocationDbService';
 import OCPIPartnerDbService from '../../../db-services/OCPIPartnerDbService';
 import { OCPIPartnerAdditionalProps, PaymentServiceProvider } from '../../../types/OCPIPartner';
 import PaymentGatewayService from '../../services/PaymentServices/PaymentGatewayService';
-import { GenericPaymentTxnStatus } from '../../../types/Payment';
 import PublishActionService from '../services/PublishActionService';
 import { UBCSelectRequestPayload } from '../../schema/v2.0.0/actions/select/types/SelectPayload';
 import OnStatusActionHandler from './OnStatusActionHandler';
@@ -161,6 +161,61 @@ export default class InitActionHandler {
                 `🟢 [${reqId}] Sent on_init call to Beckn ONIX in handleEVChargingUBCBppInitAction`,
                 { data: { response } }
             );
+
+            // Auto-trigger on_status COMPLETED when dummy paymentURL was used (UAT — no Razorpay configured).
+            // In production, Razorpay webhook fires on_status COMPLETED automatically.
+            // We build the on_status payload using ubcOnInitPayload directly (avoids DB timing race
+            // since BecknLoggingService.log writes are fire-and-forget and may not be persisted yet).
+            const onInitPayment = ubcOnInitPayload.message?.order?.['beckn:payment'] as Record<string, unknown> | undefined;
+            const onInitPaymentURL = onInitPayment?.['beckn:paymentURL'] as string | undefined;
+            const onInitTxnRef = onInitPayment?.['beckn:txnRef'] as string | undefined;
+            if (onInitPaymentURL?.includes('pay.ubc.test') && onInitTxnRef) {
+                const capturedTransactionId = reqPayload.context.transaction_id;
+                const capturedOnInitPayload = ubcOnInitPayload;
+                setImmediate(async () => {
+                    try {
+                        logger.debug(`🟡 [${reqId}] Dummy paymentURL — auto-sending on_status COMPLETED for UAT flow`, { data: { txnRef: onInitTxnRef } });
+
+                        // Fetch on_select from DB (always available — logged during select flow, not fire-and-forget)
+                        const existingOnSelectResponse = await OnStatusActionHandler.fetchExistingBppOnSelectResponse(capturedTransactionId);
+                        if (!existingOnSelectResponse) {
+                            logger.warn(`🟡 [${reqId}] No on_select found, skipping auto on_status`, { data: { txnRef: onInitTxnRef } });
+                            return;
+                        }
+
+                        // Update PaymentTxn to SUCCESS
+                        const paymentTxnRecord = await PaymentTxnDbService.getFirstByFilter({
+                            where: { authorization_reference: onInitTxnRef },
+                        });
+                        if (paymentTxnRecord) {
+                            await PaymentTxnDbService.update(paymentTxnRecord.id, { status: GenericPaymentTxnStatus.Success });
+                        }
+
+                        // Build on_status payload using in-memory ubcOnInitPayload — no DB fetch needed
+                        const ubcOnStatusPayload = await OnStatusActionHandler.translateBackendToUBC(
+                            existingOnSelectResponse,
+                            capturedOnInitPayload as any,
+                            {
+                                authorization_reference: onInitTxnRef,
+                                payment_status: BecknPaymentStatus.COMPLETED,
+                                oldPaymentStatus: GenericPaymentTxnStatus.Pending,
+                            },
+                            capturedTransactionId
+                        );
+
+                        // Send on_status COMPLETED to BAP via ONIX
+                        const bppHost = Utils.onix_bpp_caller_url();
+                        await BppOnixRequestService.sendPostRequest({
+                            url: `${bppHost}/${BecknAction.on_status}`,
+                            data: ubcOnStatusPayload,
+                        }, BecknDomain.EVChargingUBC);
+
+                        logger.debug(`🟢 [${reqId}] Auto-sent on_status COMPLETED for dummy URL UAT flow`, { data: { txnRef: onInitTxnRef } });
+                    } catch (e: any) {
+                        logger.warn(`🟡 [${reqId}] Auto on_status COMPLETED failed: ${e?.message}`, { data: { txnRef: onInitTxnRef } });
+                    }
+                });
+            }
 
             // Publish full partner catalog: engaged connector held 2 minutes (async, non-blocking)
             Utils.executeAsync(async () => {
@@ -372,6 +427,7 @@ export default class InitActionHandler {
         }
         
         const authorizationReference = Utils.generateUUID();
+        const paymentStatus = BecknPaymentStatus.INITIATED;
         const orderValueComponents = payload.payload.orderValueComponents;
         
         // Extract buyer finder fee from select request and prepare service_charge
@@ -395,7 +451,7 @@ export default class InitActionHandler {
                 breakdown: orderValueComponents,
                 gst_breakup: gstBreakup,
             } as PaymentBreakdown,
-            status: GenericPaymentTxnStatus.Pending,
+            status: paymentStatus,
             requested_energy_units: payload.payload.charging_option_unit,
             partner_id: evseConnector.partner_id,
             beckn_transaction_id: payload.metadata.beckn_transaction_id,
@@ -430,12 +486,9 @@ export default class InitActionHandler {
                     `🟡 Payment link generation failed for partner ${evseConnector.partner_id}, using dummy paymentURL: ${e?.message}`,
                     { data: { partner_id: evseConnector.partner_id, authorization_reference: authorizationReference } }
                 );
-                paymentLink = InitActionHandler.getPaymentUrlFallback(authorizationReference);
+                // Dummy URL so BAP frontend doesn't error on empty paymentURL during UAT testing
+                paymentLink = `https://pay.ubc.test/upi?ref=${authorizationReference}`;
             }
-        }
-
-        if (beneficiary === 'BPP' && !paymentLink?.trim()) {
-            paymentLink = InitActionHandler.getPaymentUrlFallback(authorizationReference);
         }
 
         const extractedOnInitResponseBody: ExtractedOnInitResponseBody = {
@@ -447,7 +500,7 @@ export default class InitActionHandler {
                 paymentLink: paymentLink,
                 chargeTxnRef: paymentTxn.authorization_reference,
                 beneficiary: 'BPP', // Payment txn is only created for BPP beneficiary
-                paymentStatus: BecknPaymentStatus.INITIATED,
+                paymentStatus: paymentStatus,
                 becknOrderId: paymentTxn.authorization_reference,
                 amount: finalAmount,
             },
@@ -472,20 +525,6 @@ export default class InitActionHandler {
         return extractedOnInitResponseBody;
     }
 
-    /**
-     * Non-empty payment URL for on_init when Razorpay/CPO returns no link (avoids empty beckn:paymentURL).
-     * Override with BECKN_INIT_PAYMENT_URL_FALLBACK (optional query string; ref= is appended).
-     */
-    public static getPaymentUrlFallback(authorizationReference: string): string {
-        const base = process.env.BECKN_INIT_PAYMENT_URL_FALLBACK?.trim();
-        const ref = encodeURIComponent(authorizationReference);
-        if (base) {
-            const sep = base.includes('?') ? '&' : '?';
-            return `${base}${sep}ref=${ref}`;
-        }
-        return `https://pay.ubc.test/upi?ref=${ref}`;
-    }
-
     public static async generatePaymentLink(
         payload: GeneratePaymentLinkRequestPayload,
         paymentTxn: PaymentTxn,
@@ -497,32 +536,19 @@ export default class InitActionHandler {
         }
         const ocpiPartnerAdditionalProps =
             ocpiPartner?.additional_props as OCPIPartnerAdditionalProps;
-
-        let result: GeneratePaymentLinkResponsePayload;
+        
         if (ocpiPartnerAdditionalProps?.payment_service_provider === PaymentServiceProvider.CPO) {
-            result = await this.sendGeneratePaymentLinkCallToBackend(payload, paymentTxn.partner_id);
+            return await this.sendGeneratePaymentLinkCallToBackend(payload, paymentTxn.partner_id);
         }
         else {
-            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as CreateUPIPaymentWithRazorpayResponse;
+            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as  CreateUPIPaymentWithRazorpayResponse;
 
-            result = {
+            return {
                 payment_link: paymentGatewayOrder.payment?.link || '',
                 authorization_reference: paymentTxn.authorization_reference,
             };
+        
         }
-
-        const authRef = String(
-            result.authorization_reference || paymentTxn.authorization_reference || paymentTxn.id
-        );
-        if (!result.payment_link?.trim()) {
-            const fallback = InitActionHandler.getPaymentUrlFallback(authRef);
-            logger.warn('Payment link empty after gateway/CPO; using fallback URL for on_init', {
-                data: { partner_id: paymentTxn.partner_id, authorization_reference: authRef },
-            });
-            return { ...result, payment_link: fallback };
-        }
-
-        return result;
     }
 
     public static async sendGeneratePaymentLinkCallToBackend(
@@ -631,8 +657,7 @@ export default class InitActionHandler {
                 value: paymentAmount,
             },
             'beckn:beneficiary': finalBeneficiary,
-            // Beckn on_init: payment is offered to buyer — schema expects INITIATED (not DB PENDING / internal txn state)
-            'beckn:paymentStatus': BecknPaymentStatus.INITIATED,
+            'beckn:paymentStatus': backendOnInitResponsePayload.payload.paymentStatus,
             // v0.9: paymentAttributes with settlementAccounts (BAP from init request, BPP from partner config)
             'beckn:paymentAttributes': Object.keys(paymentAttributes).length > 0 ? paymentAttributes : undefined,
         };
