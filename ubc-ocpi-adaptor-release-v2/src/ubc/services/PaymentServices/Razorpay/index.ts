@@ -35,6 +35,12 @@ import {
 } from '../../../../types/Razorpay';
 import PaymentTxnDbService from '../../../../db-services/PaymentTxnDbService';
 import GenericPaymentService from '../Generic';
+import {
+    buildMockRazorpayOrder,
+    buildMockUPIPaymentResponse,
+    isRazorpayFakeWithoutCredentialsEnabled,
+    isRazorpayMockMode,
+} from './razorpayMock.util';
 
 // Helper function to extract error message from unknown error
 const getErrorMessage = (error: unknown): string => {
@@ -149,8 +155,38 @@ export default class RazorpayPaymentGatewayService {
         error_details?: any;
     }> {
         try {
+            if (isRazorpayMockMode()) {
+                logger.warn('Razorpay: RAZORPAY_MOCK is on — synthetic order only (no Razorpay API)', {
+                    partnerId,
+                    receipt: order.receipt,
+                });
+                const razorpay_order = buildMockRazorpayOrder({
+                    amount: order.amount,
+                    receipt: order.receipt || `rcpt_mock_${partnerId.slice(0, 8)}`,
+                    notes: order.notes as Record<string, string> | undefined,
+                });
+                return {
+                    success: true,
+                    razorpay_order,
+                    external_integration_id: partnerId,
+                };
+            }
+
             const razorpayCredentials = await this.getCredentials(partnerId);
             if (!razorpayCredentials || !razorpayCredentials.credentials) {
+                if (isRazorpayFakeWithoutCredentialsEnabled()) {
+                    logger.warn('Razorpay: no credentials — synthetic order (fake / dev mode)', { partnerId });
+                    const razorpay_order = buildMockRazorpayOrder({
+                        amount: order.amount,
+                        receipt: order.receipt || `rcpt_mock_${partnerId.slice(0, 8)}`,
+                        notes: order.notes as Record<string, string> | undefined,
+                    });
+                    return {
+                        success: true,
+                        razorpay_order,
+                        external_integration_id: partnerId,
+                    };
+                }
                 logger.error('Razorpay: Failed to create order - External Integration not found', undefined, {
                     order,
                     partnerId,
@@ -232,8 +268,39 @@ export default class RazorpayPaymentGatewayService {
         error_details?: any;
     }> {
         try {
+            if (isRazorpayMockMode()) {
+                logger.warn('Razorpay: RAZORPAY_MOCK is on — synthetic UPI payment only (no Razorpay API)', {
+                    partnerId,
+                    order_id: request.order_id,
+                });
+                const payment = buildMockUPIPaymentResponse({
+                    orderId: request.order_id,
+                    amountPaisa: request.amount,
+                });
+                return {
+                    success: true,
+                    payment,
+                    external_integration_id: partnerId,
+                };
+            }
+
             const razorpayCredentials = await this.getCredentials(partnerId);
             if (!razorpayCredentials || !razorpayCredentials.credentials) {
+                if (isRazorpayFakeWithoutCredentialsEnabled()) {
+                    logger.warn('Razorpay: no credentials — synthetic UPI payment (fake / dev mode)', {
+                        partnerId,
+                        order_id: request.order_id,
+                    });
+                    const payment = buildMockUPIPaymentResponse({
+                        orderId: request.order_id,
+                        amountPaisa: request.amount,
+                    });
+                    return {
+                        success: true,
+                        payment,
+                        external_integration_id: partnerId,
+                    };
+                }
                 logger.error('Razorpay: Failed to create UPI payment - External Integration not found', undefined, {
                     request,
                     partnerId,

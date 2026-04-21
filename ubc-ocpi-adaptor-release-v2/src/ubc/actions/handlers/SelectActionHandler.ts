@@ -27,6 +27,10 @@ import { LocationDbService } from '../../../db-services/LocationDbService';
 import { calculateFinalAmount, buildOrderValueFromFinalAmount } from '../../utils/OrderValueCalculator';
 import { ChargingMetricsUnitCode } from '../../schema/v2.0.0/enums/ChargingMetricsUnitCode';
 import RazorpayPaymentGatewayService from '../../services/PaymentServices/Razorpay';
+import {
+    isRazorpayFakeWithoutCredentialsEnabled,
+    isRazorpayMockMode,
+} from '../../services/PaymentServices/Razorpay/razorpayMock.util';
 import { BuyerFinderFee } from '../../schema/v2.0.0/types/BuyerFinderFee';
 import { BuyerFinderFeeEnum } from '../../schema/v2.0.0/enums/BuyerFinderFeeEnum';
 
@@ -421,13 +425,12 @@ export default class SelectActionHandler {
          let feePercentage = 0.2; // default fallback
 
         if (!razorpayCredentials) {
-             logger.warn(`⚠️ Razorpay not configured for partner ${partnerId}, skipping payment config`);
-
-             // keep default feePercentage OR set to 0 if you want no fee
-             feePercentage = 0; 
-        } 
+            logger.warn(`⚠️ Razorpay not configured for partner ${partnerId}, skipping payment config`);
+            feePercentage =
+                isRazorpayMockMode() || isRazorpayFakeWithoutCredentialsEnabled() ? 0.2 : 0;
+        }
         else {
-             feePercentage = razorpayCredentials.credentials?.fee_percentage ?? 0.2;
+            feePercentage = razorpayCredentials.credentials?.fee_percentage ?? 0.2;
         }
        
 //************************************************************************************ */

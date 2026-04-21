@@ -33,6 +33,7 @@ import Utils from "../../../../utils/Utils";
 import { BecknOrderValueComponents } from "../../../schema/v2.0.0/types/OrderValue";
 import { OrderValueComponentsType } from "../../../schema/v2.0.0/enums/OrderValueComponentsType";
 import GenericPaymentService from "../Generic";
+import { isRazorpayFakeWithoutCredentialsEnabled, isRazorpayMockMode } from "./razorpayMock.util";
 
 // Helper function to extract error message
 const getErrorMessage = (error: unknown): string => {
@@ -1277,10 +1278,10 @@ export default class RazorpayPaymentService {
             }
 
             const razorpayCredentials = await RazorpayPaymentGatewayService.getCredentials(partnerId);
-            if (!razorpayCredentials) {
+            if (!razorpayCredentials && !isRazorpayMockMode() && !isRazorpayFakeWithoutCredentialsEnabled()) {
                 throw new Error('Razorpay credentials not found for partner');
             }
-            const { fee_percentage: feePercentage = 0.2 } = razorpayCredentials.credentials;
+            const feePercentage = razorpayCredentials?.credentials?.fee_percentage ?? 0.2;
 
 
             // const feeAmount = Math.ceil(feePercentage * amountInPaisa / 100) + 2 * Math.round(9 * Math.ceil(feePercentage * amountInPaisa / 100) / 100);
