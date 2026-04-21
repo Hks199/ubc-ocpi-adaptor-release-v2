@@ -76,7 +76,7 @@ export default class OnStatusActionHandler {
     public static async sendOnStatusWithCompletedPayment(
         authorization_reference: string,
         oldPaymentStatus?: GenericPaymentTxnStatus
-    ): Promise<void> {
+    ): Promise<boolean> {
         try {
             logger.info('Sending on_status with COMPLETED payment status', {
                 authorization_reference,
@@ -114,13 +114,14 @@ export default class OnStatusActionHandler {
             logger.info('Successfully sent on_status with COMPLETED payment status', {
                 authorization_reference,
             });
+            return true;
         }
         catch (error: unknown) {
-            // Log error but don't fail - status update was already done
             const err = error instanceof Error ? error : new Error(String(error));
             logger.error('Failed to send on_status with COMPLETED payment status', err, {
                 authorization_reference,
             });
+            return false;
         }
     }
 

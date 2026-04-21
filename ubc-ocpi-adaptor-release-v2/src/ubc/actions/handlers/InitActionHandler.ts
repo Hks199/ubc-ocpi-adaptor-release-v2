@@ -29,6 +29,7 @@ import { LocationDbService } from '../../../db-services/LocationDbService';
 import OCPIPartnerDbService from '../../../db-services/OCPIPartnerDbService';
 import { OCPIPartnerAdditionalProps, PaymentServiceProvider } from '../../../types/OCPIPartner';
 import PaymentGatewayService from '../../services/PaymentServices/PaymentGatewayService';
+import { GenericPaymentTxnStatus } from '../../../types/Payment';
 import PublishActionService from '../services/PublishActionService';
 import { UBCSelectRequestPayload } from '../../schema/v2.0.0/actions/select/types/SelectPayload';
 import OnStatusActionHandler from './OnStatusActionHandler';
@@ -371,7 +372,6 @@ export default class InitActionHandler {
         }
         
         const authorizationReference = Utils.generateUUID();
-        const paymentStatus = BecknPaymentStatus.PENDING;
         const orderValueComponents = payload.payload.orderValueComponents;
         
         // Extract buyer finder fee from select request and prepare service_charge
@@ -395,7 +395,7 @@ export default class InitActionHandler {
                 breakdown: orderValueComponents,
                 gst_breakup: gstBreakup,
             } as PaymentBreakdown,
-            status: paymentStatus,
+            status: GenericPaymentTxnStatus.Pending,
             requested_energy_units: payload.payload.charging_option_unit,
             partner_id: evseConnector.partner_id,
             beckn_transaction_id: payload.metadata.beckn_transaction_id,
@@ -444,7 +444,7 @@ export default class InitActionHandler {
                 paymentLink: paymentLink,
                 chargeTxnRef: paymentTxn.authorization_reference,
                 beneficiary: 'BPP', // Payment txn is only created for BPP beneficiary
-                paymentStatus: paymentStatus,
+                paymentStatus: BecknPaymentStatus.INITIATED,
                 becknOrderId: paymentTxn.authorization_reference,
                 amount: finalAmount,
             },
@@ -601,7 +601,8 @@ export default class InitActionHandler {
                 value: paymentAmount,
             },
             'beckn:beneficiary': finalBeneficiary,
-            'beckn:paymentStatus': backendOnInitResponsePayload.payload.paymentStatus,
+            // Beckn on_init: payment is offered to buyer — schema expects INITIATED (not DB PENDING / internal txn state)
+            'beckn:paymentStatus': BecknPaymentStatus.INITIATED,
             // v0.9: paymentAttributes with settlementAccounts (BAP from init request, BPP from partner config)
             'beckn:paymentAttributes': Object.keys(paymentAttributes).length > 0 ? paymentAttributes : undefined,
         };

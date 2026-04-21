@@ -17,6 +17,7 @@ import healthRoutes from './api/health/routes';
 import ocpiOutgoingRoutes from './api/ocpi/ocpi-outgoing-routes';
 import ocpiIncomingRoutes from './ocpi/ocpi-incoming-routes';
 import appRoutes from './api/app/routes';
+import internalRoutes from './api/internal/routes';
 import { CronService } from './ubc/services/cron/CronService';
 
 const app: Express = express();
@@ -84,6 +85,9 @@ app.use('/api/admin/commands', adminCommandsRoutes);
 app.use('/api/health', healthRoutes);
 
 app.use('/api/app', appRoutes);
+
+// UAT: manual on_status(COMPLETED) when Razorpay webhooks are not used (see /internal/on-status/payment-completed/:authRef)
+app.use('/internal', internalRoutes);
 
 // Error handling middleware
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
