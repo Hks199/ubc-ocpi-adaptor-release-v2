@@ -305,9 +305,12 @@ enum ConnectorType {
 const UBC_TSD_CORE_V2_CONTEXT =
     'https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld';
 
-/** UBC TSD — ChargingService itemAttributes @context */
-const UBC_TSD_EV_CHARGING_SERVICE_CONTEXT =
-    'https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld';
+/**
+ * `beckn:itemAttributes.@context` — CDS fetches linked YAML; `protocol-specifications-new/.../EvChargingService/v1`
+ * resolves `attributes.yaml` → 404 on GitHub. Use core-v2.0.0-rc so catalog_publish validates on UAT CDS.
+ */
+const EV_CHARGING_ITEM_ATTRIBUTES_CONTEXT =
+    'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingService/v1/context.jsonld';
 
 /** UBC TSD — ChargingOffer offerAttributes @context */
 const UBC_TSD_CHARGING_OFFER_CONTEXT =
@@ -988,7 +991,7 @@ export default class PublishActionService {
         const { externalChargingStationId, externalChargePointId } = this.getExternalChargingStationAndChargePointId(connector);
 
         const attributes: BecknChargingServiceAttributes = {
-            "@context": UBC_TSD_EV_CHARGING_SERVICE_CONTEXT,
+            "@context": EV_CHARGING_ITEM_ATTRIBUTES_CONTEXT,
             "@type": "ChargingService",
             "connectorType": connectorType,
             "maxPowerKW": maxPowerKW,
