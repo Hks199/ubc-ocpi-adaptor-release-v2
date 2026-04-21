@@ -175,7 +175,7 @@ export default class OnUpdateActionHandler {
         // Convert backend payload to UBC format
         const ubcOnUpdatePayload = this.translateBackendToUBC(basePayload, payload);
 
-        const bppHost = Utils.getBPPClientHost();
+        const bppHost = Utils.onix_bpp_caller_url();
 
         await BppOnixRequestService.sendPostRequest(
             {

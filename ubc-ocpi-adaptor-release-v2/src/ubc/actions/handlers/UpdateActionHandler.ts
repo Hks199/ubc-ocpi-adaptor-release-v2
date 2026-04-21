@@ -22,7 +22,7 @@ import { LocationDbService } from '../../../db-services/LocationDbService';
 import { OCPICommandResponseResponse } from '../../../ocpi/schema/modules/commands/types/responses';
 import { OCPICommandResponseType } from '../../../ocpi/schema/modules/commands/enums';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
-// import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
+import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
 import { mapGenericToBecknStatus } from '../../services/PaymentServices/Razorpay/RazorpayPaymentService';
 
 /**
@@ -119,15 +119,16 @@ export default class UpdateActionHandler {
 
             // Send error response to BAP side so the stitched response can be resolved
             // This prevents the request from getting stuck in REQUESTS_STORE waiting for a callback
-            // try {
-            //     await UpdateActionHandler.sendErrorOnUpdateResponse(reqPayload, e instanceof Error ? e : new Error(e?.toString() || 'Unknown error'));
-            // }
-            // catch (sendError: any) {
-            //     logger.error(`🔴 [${reqId}] Error sending error on_update response`, {
-            //         data: { message: 'Failed to send error response' },
-            //         error: sendError
-            //     });
-            // }
+            try {
+                await UpdateActionHandler.sendErrorOnUpdateResponse(reqPayload, e instanceof Error ? e : new Error(e?.toString() || 'Unknown error'));
+            }
+            catch (sendError: any) {
+                logger.error(
+                    `🔴 [${reqId}] Error sending error on_update response`,
+                    sendError instanceof Error ? sendError : new Error(String(sendError)),
+                    { data: { message: 'Failed to send error response' } }
+                );
+            }
 
             throw e;
         }
@@ -262,7 +263,10 @@ export default class UpdateActionHandler {
         if (beneficiary === 'BPP') {
             paymentTxn = await PaymentTxnDbService.getFirstByFilter({
                 where: {
-                    authorization_reference: beckn_order_id,
+                    OR: [
+                        { authorization_reference: beckn_order_id },
+                        { beckn_transaction_id: beckn_order_id },
+                    ],
                 },
             });
 
@@ -271,11 +275,9 @@ export default class UpdateActionHandler {
             }
 
             const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
-            
-            // {"PENDING" ||} in below if condition remove {"PENDING" ||} this part in production
-            // BecknPaymentStatus.COMPLETED write this later in production after testing with pending status in dev and staging environment, currently we are keeping pending status to proceed with charging session without waiting for payment completion as we are not sure about the payment flow and status updates from Razorpay in the current implementation. Once we have clarity on the payment flow and status updates, we can update this condition to check for actual payment completion status.
-            if (paymentStatus !== "PENDING") {  
-                throw new Error('Payment txn is not completed');
+
+            if (paymentStatus !== BecknPaymentStatus.PENDING && paymentStatus !== BecknPaymentStatus.COMPLETED) {
+                throw new Error(`Payment txn status '${paymentStatus}' is not valid for charging. Expected PENDING or COMPLETED.`);
             }
         }
         
@@ -376,6 +378,9 @@ export default class UpdateActionHandler {
             //         }
             //     }
             // } 
+            if (!session.cpo_session_id) {
+                throw new Error(`Cannot stop charging: CPO session ID not yet available for authorization_reference=${beckn_order_id}. The CPO may not have started the session yet.`);
+            }
             const req = {
                 body: {
                     partner_id: session.partner_id,

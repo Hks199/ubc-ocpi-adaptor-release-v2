@@ -253,13 +253,21 @@ export default class StatusActionHandler {
         // Extract connector ID from orderedItem (format: IND*sellerId*csId*cpId*connectorId)
         const orderedItem = orderItems[0]?.['beckn:orderedItem'] as string;
         if (orderedItem) {
-            // This will throw an error if EVSE is not found
-            connectorStatus = await StatusActionHandler.getConnectorStatusFromEVSE(orderedItem);
+            try {
+                connectorStatus = await StatusActionHandler.getConnectorStatusFromEVSE(orderedItem);
+            }
+            catch (e: any) {
+                logger.warn(`🟡 Could not fetch connector status from EVSE for ${orderedItem}, using fallback`, {
+                    data: { error: e?.message }
+                });
+                // Fallback to AVAILABLE so status doesn't fail completely
+                connectorStatus = connectorStatus || 'AVAILABLE';
+            }
         }
         else {
             // If no orderedItem, use default from status request
-            logger.debug(`🟡 No orderedItem found, using connectorStatus from status request`, { 
-                data: { connectorStatus } 
+            logger.debug(`🟡 No orderedItem found, using connectorStatus from status request`, {
+                data: { connectorStatus }
             });
         }
 

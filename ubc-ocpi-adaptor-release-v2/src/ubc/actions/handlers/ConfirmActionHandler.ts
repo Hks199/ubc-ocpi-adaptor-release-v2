@@ -213,17 +213,29 @@ export default class ConfirmActionHandler {
         
         let connectorType: string | undefined;
         let maxPowerKW: number | undefined;
-        
+
+        // Try to get connector details from the incoming order items first (BAP may provide them)
+        const orderItemAttributes = orderItems?.[0] as Record<string, unknown> | undefined;
+        const itemDeliveryAttributes = orderItemAttributes?.['beckn:deliveryAttributes'] as Record<string, unknown> | undefined;
+        if (itemDeliveryAttributes?.connectorType) {
+            connectorType = itemDeliveryAttributes.connectorType as string;
+        }
+        if (itemDeliveryAttributes?.maxPowerKW !== undefined) {
+            maxPowerKW = Number(itemDeliveryAttributes.maxPowerKW);
+        }
+
         if (orderedItem) {
             try {
                 // Fetch connector directly from DB using beckn_connector_id
                 const connectorData = await LocationDbService.getConnectorByBecknId(orderedItem);
-                
+
                 if (connectorData) {
                     const evseConnector = connectorData.connector;
-                    connectorType = convertOcpiStandardToConnectorType(evseConnector.standard);
+                    const dbConnectorType = convertOcpiStandardToConnectorType(evseConnector.standard);
 
-                    if (!connectorType) {
+                    if (dbConnectorType) {
+                        connectorType = dbConnectorType;
+                    } else {
                         logger.warn(`🟡 No connector type found for connector ${connectorData?.connector?.id}`);
                     }
                     // Convert max_electric_power from W to kW
@@ -239,6 +251,16 @@ export default class ConfirmActionHandler {
                 // Continue without connector details if fetch fails
             }
         }
+
+        // Final fallback: use defaults so on_confirm is always schema-valid
+        if (!connectorType) {
+            connectorType = 'CCS2';
+            logger.warn(`🟡 Using default connectorType 'CCS2' for on_confirm (orderedItem=${orderedItem})`);
+        }
+        if (maxPowerKW === undefined) {
+            maxPowerKW = 22;
+            logger.warn(`🟡 Using default maxPowerKW=22 for on_confirm (orderedItem=${orderedItem})`);
+        }
         
         // v0.9: OnConfirm response - added fulfillment with deliveryAttributes (sessionStatus, connectorType, maxPowerKW)
         // v0.9: Removed orderNumber, orderAttributes
@@ -246,8 +268,8 @@ export default class ConfirmActionHandler {
             '@context': 'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld',
             '@type': 'ChargingSession' as const,
             sessionStatus: ChargingSessionStatus.PENDING, // Initial status, will change to ACTIVE when charging starts
-            ...(connectorType && { connectorType }),
-            ...(maxPowerKW !== undefined && { maxPowerKW }),
+            connectorType,
+            maxPowerKW,
         };
         
         const ubcOnConfirmPayload: UBCOnConfirmRequestPayload = {

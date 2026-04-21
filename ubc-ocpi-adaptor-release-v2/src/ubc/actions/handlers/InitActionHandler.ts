@@ -453,7 +453,7 @@ export default class InitActionHandler {
             buyer_info: payload?.payload?.buyer_details as BuyerDetails,
         };
         
-        SessionDbService.create({
+        await SessionDbService.create({
             data: sessionData,
         });
 

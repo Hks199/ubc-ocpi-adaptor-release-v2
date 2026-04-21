@@ -320,8 +320,8 @@ export default class OnStatusActionHandler {
                 amount
             );
 
-            const bppHost = Utils.getBPPClientHost();
-            
+            const bppHost = Utils.onix_bpp_caller_url();
+
             logger.debug(`🟡 [${authorization_reference}] Translating backend to UBC format: `, { bppHost, ubcOnStatusPayload });
 
             return await BppOnixRequestService.sendPostRequest({
