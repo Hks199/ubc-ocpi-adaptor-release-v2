@@ -517,3 +517,40 @@ model PaymentTxn {
   @@index([payment_gateway_order_id])
   @@map("payment_txn")
 }
+
+model RatingRecord {
+  id                    String   @id @default(uuid())
+  beckn_transaction_id  String
+  message_id            String
+  bpp_id                String?
+  bpp_uri               String?
+  bap_id                String?
+  bap_uri               String?
+  rating_value          Decimal  @db.Decimal(5, 2)
+  rating_category       String
+  best_rating           Decimal? @db.Decimal(5, 2)
+  worst_rating          Decimal? @db.Decimal(5, 2)
+  auth_reference        String?
+  comments              String?
+  tags                  Json?    @default("[]") @db.Json
+  partner_id            String?
+  session_id            String?
+  payment_txn_id        String?
+  backend_url           String?
+  backend_request       Json?    @default("{}") @db.Json
+  backend_response      Json?    @default("{}") @db.Json
+  on_rating_payload     Json?    @default("{}") @db.Json
+  status                String   @default("RECEIVED")
+  error_message         String?
+  additional_props      Json?    @default("{}") @db.Json
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@index([beckn_transaction_id])
+  @@index([message_id])
+  @@index([partner_id])
+  @@index([session_id])
+  @@index([payment_txn_id])
+  @@index([status])
+  @@map("rating_record")
+}

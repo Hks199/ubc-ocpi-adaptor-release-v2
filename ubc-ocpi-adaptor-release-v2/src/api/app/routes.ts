@@ -10,6 +10,26 @@ import { logger } from '../../services/logger.service';
 
 const router = Router();
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const deepMerge = <T extends Record<string, unknown>>(target: T, source: Record<string, unknown>): T => {
+    const output: Record<string, unknown> = { ...target };
+
+    Object.entries(source).forEach(([key, value]) => {
+        const existingValue = output[key];
+
+        if (isPlainObject(existingValue) && isPlainObject(value)) {
+            output[key] = deepMerge(existingValue, value);
+            return;
+        }
+
+        output[key] = value;
+    });
+
+    return output as T;
+};
+
 // ============================================
 // RAZORPAY ROUTES
 // ============================================
@@ -213,13 +233,105 @@ router.get('/check-payment-status/razorpay/:paymentTxnId', async (req: Request, 
 });
 
 /**
- * Configure Razorpay credentials for a partner
+ * Configure partner additional_props for a partner.
+ * Backward compatible with the old Razorpay-only payload.
  * POST /api/app/razorpay/configure/:partnerId
  */
+
+//************************************* */ full payload
+// {
+//   "additional_props": {
+//     "communication_urls": {
+//       "generate_payment_link": {
+//         "url": "https://cpo.example.com/payments/generate-link",
+//         "auth_token": "Bearer your-generate-payment-link-token"
+//       },
+//       "submit_rating": {
+//         "url": "https://cpo.example.com/ratings/submit",
+//         "auth_token": "Bearer your-submit-rating-token"
+//       },
+//       "webhook_callback": {
+//         "url": "https://cpo.example.com/webhooks/beckn"
+//       }
+//     },
+//     "support": {
+//       "name": "CPO Support",
+//       "phone": "+91-9999999999",
+//       "email": "support@cpo.example.com",
+//       "url": "https://cpo.example.com/support",
+//       "hours": "24x7",
+//       "channels": ["phone", "email", "chat"]
+//     },
+//     "payment_service_provider": "RAZORPAY",
+//     "payment_services": {
+//       "Razorpay": {
+//         "KEY_ID": "rzp_test_xxxxxxxx",
+//         "KEY_SECRET": "your_razorpay_key_secret",
+//         "API_URL": "https://api.razorpay.com/v1",
+//         "WEBHOOK_SECRET": "your_razorpay_webhook_secret"
+//       }
+//     },
+//     "callback_on_status_api": {
+//       "enabled": true,
+//       "callback_time": 30
+//     },
+//     "beneficiary": "BPP",
+//     "settlement_account": {
+//       "accountHolderName": "UBC Mobility Pvt Ltd",
+//       "accountNumber": "123456789012",
+//       "ifscCode": "HDFC0001234",
+//       "bankName": "HDFC Bank",
+//       "vpa": "ubc@upi"
+//     },
+//     "mock_rating_request": false,
+//     "test_mode": true,
+//     "stop_charging_delay": 10,
+//     "ubc_party_id": "TPC"
+//   }
+// }
+
+//***************************************************** */
+
+// {
+//   "additional_props": {
+//     "mock_rating_request": false,
+//     "communication_urls": {
+//       "submit_rating": {
+//         "url": "https://cpo.example.com/ratings",
+//         "auth_token": "Bearer abc123"
+//       }
+//     },
+//     "support": {
+//       "name": "Support Team",
+//       "phone": "+91-9999999999",
+//       "email": "support@example.com",
+//       "url": "https://example.com/support",
+//       "hours": "24x7",
+//       "channels": ["phone", "email"]
+//     }
+//   }
+// }
+
+//************************************************** */
+
+// {
+//   "mock_rating_request": false,
+//   "communication_urls": {
+//     "submit_rating": {
+//       "url": "https://cpo.example.com/ratings",
+//       "auth_token": "Bearer abc123"
+//     }
+//   }
+// }
+
+
+
 router.post('/razorpay/configure/:partnerId', async (req: Request, res: Response) => {
     try {
         const { partnerId } = req.params;
-        const credentials: RazorpayCredentials = req.body;
+        const requestBody = req.body as Partial<RazorpayCredentials> & {
+            additional_props?: Partial<OCPIPartnerAdditionalProps>;
+        } & Partial<OCPIPartnerAdditionalProps>;
 
         if (!partnerId) {
             res.status(400).json({ success: false, error: 'Missing partnerId' });
@@ -233,32 +345,63 @@ router.post('/razorpay/configure/:partnerId', async (req: Request, res: Response
             return;
         }
 
-        // Update additional_props with Razorpay credentials
+        // Accept either:
+        // 1. legacy Razorpay-only body
+        // 2. { additional_props: { ... } }
+        // 3. direct additional_props fields at the top level
         const existingProps = partner.additional_props as OCPIPartnerAdditionalProps || {};
-        const updatedProps: OCPIPartnerAdditionalProps = {
-            ...existingProps,
-            payment_services: {
-                ...existingProps.payment_services,
-                Razorpay: {
-                    KEY_ID: credentials.KEY_ID,
-                    KEY_SECRET: credentials.KEY_SECRET,
-                    API_URL: credentials.API_URL,
-                    WEBHOOK_SECRET: credentials.WEBHOOK_SECRET,
-                },
-            },
+        let incomingAdditionalProps: Partial<OCPIPartnerAdditionalProps> = requestBody.additional_props || {
+            ...requestBody,
         };
+
+        delete (incomingAdditionalProps as Record<string, unknown>).additional_props;
+        delete (incomingAdditionalProps as Record<string, unknown>).KEY_ID;
+        delete (incomingAdditionalProps as Record<string, unknown>).KEY_SECRET;
+        delete (incomingAdditionalProps as Record<string, unknown>).API_URL;
+        delete (incomingAdditionalProps as Record<string, unknown>).WEBHOOK_SECRET;
+
+        if (requestBody.KEY_ID || requestBody.KEY_SECRET || requestBody.API_URL || requestBody.WEBHOOK_SECRET) {
+            incomingAdditionalProps = deepMerge(
+                incomingAdditionalProps as Record<string, unknown>,
+                {
+                    payment_services: {
+                        Razorpay: {
+                            KEY_ID: requestBody.KEY_ID,
+                            KEY_SECRET: requestBody.KEY_SECRET,
+                            API_URL: requestBody.API_URL,
+                            WEBHOOK_SECRET: requestBody.WEBHOOK_SECRET,
+                        },
+                    },
+                }
+            ) as Partial<OCPIPartnerAdditionalProps>;
+        }
+
+        if (!Object.keys(incomingAdditionalProps).length) {
+            res.status(400).json({
+                success: false,
+                error: 'Provide additional_props fields or Razorpay credentials',
+            });
+            return;
+        }
+
+        const updatedProps = deepMerge(
+            (existingProps || {}) as Record<string, unknown>,
+            incomingAdditionalProps as Record<string, unknown>
+        ) as OCPIPartnerAdditionalProps;
 
         await OCPIPartnerDbService.update(partnerId, {
             additional_props: updatedProps as any,
         });
 
-        // Clear credentials cache
-        RazorpayInitializerService.clearCache(partnerId);
+        if (updatedProps.payment_services?.Razorpay) {
+            RazorpayInitializerService.clearCache(partnerId);
+        }
 
         res.status(200).json({
             success: true,
-            message: 'Razorpay credentials updated successfully',
+            message: 'Partner additional_props updated successfully',
             partnerId,
+            additional_props: updatedProps,
         });
     }
     catch (error) {

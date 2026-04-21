@@ -20,6 +20,7 @@ import { OCPIPartnerAdditionalProps } from '../../../types/OCPIPartner';
 import CPOBackendRequestService from '../../services/CPOBackendRequestService';
 import { RatingMessage } from '../../schema/v2.0.0/actions/rating/types/OnRatingPayload';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
+import RatingRecordDbService from '../../../db-services/RatingRecordDbService';
 
 /**
  * Handler for rating action
@@ -48,6 +49,7 @@ export default class RatingActionHandler {
     ): Promise<UBCOnRatingRequestPayload> {
         const reqId = reqPayload.context?.message_id || 'unknown';
         const logData = { action: 'rating', messageId: reqId };
+        let ratingRecordId: string | null = null;
 
         try {
             // translate BAP schema to CPO's BE server
@@ -57,6 +59,8 @@ export default class RatingActionHandler {
             );
             const backendRatingPayload: ExtractedRatingRequestBody =
                 RatingActionHandler.translateUBCToBackendPayload(reqPayload);
+            const ratingRecord = await RatingActionHandler.createRatingRecord(reqPayload, backendRatingPayload);
+            ratingRecordId = ratingRecord.id;
 
             // make a request to CPO BE server
             logger.debug(
@@ -64,7 +68,7 @@ export default class RatingActionHandler {
                 { data: { backendRatingPayload } }
             );
             const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload =
-                await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload);
+                await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload, ratingRecordId);
             logger.debug(
                 `🟢 [${reqId}] Received rating response from backend in handleEVChargingUBCBppRatingAction`,
                 { data: { backendOnRatingResponsePayload } }
@@ -84,6 +88,15 @@ export default class RatingActionHandler {
                 { data: { ubcOnRatingPayload } }
             );
             const response = await RatingActionHandler.sendOnRatingCallToBecknONIX(ubcOnRatingPayload);
+            if (ratingRecordId) {
+                await RatingRecordDbService.update(ratingRecordId, {
+                    on_rating_payload: ubcOnRatingPayload as any,
+                    status: 'ON_RATING_SENT',
+                    additional_props: {
+                        on_rating_ack: response,
+                    } as any,
+                });
+            }
             logger.debug(
                 `🟢 [${reqId}] Sent on_rating call to Beckn ONIX in handleEVChargingUBCBppRatingAction`,
                 { data: { response } }
@@ -92,6 +105,12 @@ export default class RatingActionHandler {
             return ubcOnRatingPayload;
         }
         catch (e: any) {
+            if (ratingRecordId) {
+                await RatingRecordDbService.update(ratingRecordId, {
+                    status: 'FAILED',
+                    error_message: e?.message || e?.toString?.() || 'Unknown error',
+                });
+            }
             logger.error(
                 `🔴 [${reqId}] Error in UBCBppActionService.handleEVChargingUBCBppRatingAction: ${e?.toString()}`,
                 e,
@@ -130,8 +149,34 @@ export default class RatingActionHandler {
         return backendRatingPayload;
     }
 
+    public static async createRatingRecord(
+        payload: UBCRatingRequestPayload,
+        backendPayload: ExtractedRatingRequestBody
+    ) {
+        return RatingRecordDbService.create({
+            data: {
+                beckn_transaction_id: payload.context.transaction_id,
+                message_id: payload.context.message_id,
+                bpp_id: payload.context.bpp_id,
+                bpp_uri: payload.context.bpp_uri,
+                bap_id: payload.context.bap_id,
+                bap_uri: payload.context.bap_uri,
+                rating_value: payload.message.value,
+                rating_category: payload.message.category,
+                best_rating: payload.message.best,
+                worst_rating: payload.message.worst,
+                auth_reference: backendPayload.payload.auth_reference,
+                comments: backendPayload.payload.comments,
+                tags: backendPayload.payload.tags as any,
+                backend_request: backendPayload as any,
+                status: 'RECEIVED',
+            },
+        });
+    }
+
     public static async sendRatingCallToBackend(
-        payload: ExtractedRatingRequestBody
+        payload: ExtractedRatingRequestBody,
+        ratingRecordId?: string | null
     ): Promise<ExtractedOnRatingResponsePayload> {
         const { rating, comments, tags } = payload.payload;
         const { beckn_transaction_id } = payload.metadata;
@@ -170,6 +215,16 @@ export default class RatingActionHandler {
         const ocpiPartnerAdditionalProps =
             ocpiPartner.additional_props as OCPIPartnerAdditionalProps;
 
+        if (ratingRecordId) {
+            await RatingRecordDbService.update(ratingRecordId, {
+                payment_txn_id: paymentTxn.id,
+                session_id: session.id,
+                partner_id: session.partner_id,
+                auth_reference: paymentTxn.authorization_reference,
+                status: 'RESOLVED',
+            });
+        }
+
         // Check if mock_rating_request is enabled
         if (ocpiPartnerAdditionalProps?.mock_rating_request === true) {
             logger.debug(`🟡 Mocking rating response for beckn_transaction_id: ${beckn_transaction_id}`);
@@ -184,6 +239,16 @@ export default class RatingActionHandler {
                     session_id: session.id, // Pass session id for feedbackForm
                 },
             };
+
+            if (ratingRecordId) {
+                await RatingRecordDbService.update(ratingRecordId, {
+                    backend_response: backendOnRatingResponsePayload as any,
+                    status: 'MOCKED',
+                    additional_props: {
+                        mock_rating_request: true,
+                    } as any,
+                });
+            }
 
             return backendOnRatingResponsePayload;
         }
@@ -245,6 +310,15 @@ export default class RatingActionHandler {
                 session_id: session.id, // Pass session id for feedbackForm
             },
         };
+
+        if (ratingRecordId) {
+            await RatingRecordDbService.update(ratingRecordId, {
+                backend_url: submitRatingUrl,
+                backend_request: submitRatingPayload as any,
+                backend_response: backendOnRatingResponsePayload as any,
+                status: 'FORWARDED',
+            });
+        }
 
         return backendOnRatingResponsePayload;
     }
