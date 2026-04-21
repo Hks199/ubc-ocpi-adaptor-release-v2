@@ -37,5 +37,11 @@ export type PostAppPublishRequestPayload = {
     isActive?: boolean;
     /** Optional: Reservation time in seconds. If provided, excludes the period from now to now + reservationTime from availability windows */
     reservationTime?: number;
+    /**
+     * When set with `partner_id` (full-network publish), only this EVSEConnector row (`id`) gets
+     * `reservationTime` on availability windows and `beckn:isActive: false` while reserved. All other
+     * connectors stay fully available and active.
+     */
+    engaged_internal_connector_id?: string;
 };
 

@@ -20,6 +20,7 @@ import { SessionDbService } from '../../../db-services/SessionDbService';
 import { LocationDbService } from '../../../db-services/LocationDbService';
 import { ChargingSessionStatus } from '../../schema/v2.0.0/enums/ChargingSessionStatus';
 import { convertOcpiStandardToConnectorType } from '../services/PublishActionService';
+import { GenericPaymentTxnStatus } from '../../../types/Payment';
 
 /**
  * Handler for confirm action
@@ -37,8 +38,22 @@ export default class ConfirmActionHandler {
                         data: ubcOnConfirmResponsePayload,
                     });
                 })
-                .catch((e: Error) => {
+                .catch(async (e: Error) => {
                     logger.error(`🔴 Error in handleBppConfirmAction: 'Something went wrong'`, e);
+                    try {
+                        await ConfirmActionHandler.sendErrorOnConfirmResponse(
+                            payload,
+                            e instanceof Error ? e : new Error(String(e)),
+                        );
+                    }
+                    catch (sendError: unknown) {
+                        const err = sendError instanceof Error ? sendError : new Error(String(sendError));
+                        logger.error(
+                            `🔴 Error sending error on_confirm response`,
+                            err,
+                            { data: { message: 'Failed to send error response' } },
+                        );
+                    }
                 });
         });
     }
@@ -105,18 +120,6 @@ export default class ConfirmActionHandler {
                 }
             );
 
-            // Send error response to BAP side so the stitched response can be resolved
-            // This prevents the request from getting stuck in REQUESTS_STORE waiting for a callback
-            // try {
-            //     await ConfirmActionHandler.sendErrorOnConfirmResponse(reqPayload, e instanceof Error ? e : new Error(e?.toString() || 'Unknown error'));
-            // }
-            // catch (sendError: any) {
-            //     logger.error(`🔴 [${reqId}] Error sending error on_confirm response`, {
-            //         data: { message: 'Failed to send error response' },
-            //         error: sendError
-            //     });
-            // }
-
             throw e;
         }
     }
@@ -141,6 +144,20 @@ export default class ConfirmActionHandler {
         return backendConfirmPayload;
     }
 
+    /** Beckn `beckn:id` on confirm is the order id from on_init: `authorization_reference`, not always `beckn_transaction_id`. */
+    private static isSuccessfulPaymentStatus(status: string | null | undefined): boolean {
+        if (!status) {
+            return false;
+        }
+        const u = status.toUpperCase();
+        return (
+            u === BecknPaymentStatus.COMPLETED.toUpperCase()
+            || u === GenericPaymentTxnStatus.Success.toUpperCase()
+            || u === 'SUCCESS'
+            || u === 'COMPLETED'
+        );
+    }
+
     public static async sendConfirmCallToBackend(
         payload: ExtractedConfirmRequestBody
     ): Promise<ExtractedOnConfirmResponsePayload> {
@@ -148,11 +165,14 @@ export default class ConfirmActionHandler {
         const becknOrderId = payload.payload.beckn_order_id;
         const paymentTxn = await PaymentTxnDbService.getFirstByFilter({
             where: {
-                beckn_transaction_id: becknOrderId,
-                status: BecknPaymentStatus.COMPLETED,
+                deleted: false,
+                OR: [
+                    { authorization_reference: becknOrderId },
+                    { beckn_transaction_id: becknOrderId },
+                ],
             },
         });
-        if (!paymentTxn) {
+        if (!paymentTxn || !ConfirmActionHandler.isSuccessfulPaymentStatus(paymentTxn.status)) {
             return {
                 order_status: OrderStatus.CONFIRMED,
                 payment_received_at: new Date().toISOString(),
@@ -162,13 +182,18 @@ export default class ConfirmActionHandler {
         const paymentAdditionalProps = paymentTxn?.additional_props as PaymentTxnAdditionalProps;
         const paymentReceivedAt = paymentAdditionalProps?.payment_received_at;
 
-        const session = await SessionDbService.getByAuthorizationReference(becknOrderId);
+        const session = await SessionDbService.getByAuthorizationReference(
+            paymentTxn.authorization_reference,
+        );
 
         const evse = await EvseDbService.getByEvseUId(session?.evse_uid ?? '');
 
-        const evseStatus = evse?.status;
+        const evseStatus = (evse?.status || '').toUpperCase();
+        // After init / reserve, CPOs often report RESERVED or BLOCKED; only hard-fail on unusable states.
+        const evseUnusable = ['REMOVED', 'OUTOFORDER', 'INOPERATIVE'].includes(evseStatus);
 
-        let orderStatus = evseStatus === 'AVAILABLE' ? OrderStatus.CONFIRMED : OrderStatus.FAILED;
+        const orderStatus =
+            session && !evseUnusable ? OrderStatus.CONFIRMED : OrderStatus.FAILED;
         
         return {
             order_status: orderStatus,

@@ -2,7 +2,8 @@ import { BecknAction } from "../enums/BecknAction"
 import { BecknDomain } from "../enums/BecknDomain"
 
 export type Context = {
-    domain: BecknDomain,
+    /** Omitted on `catalog_publish` per UBC TSD; included on BAP-facing actions. */
+    domain?: BecknDomain,
     action: BecknAction
     version: string
     bap_id?: string

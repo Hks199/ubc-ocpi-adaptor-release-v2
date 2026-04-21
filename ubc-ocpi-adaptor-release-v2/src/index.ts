@@ -21,6 +21,9 @@ import { CronService } from './ubc/services/cron/CronService';
 
 const app: Express = express();
 
+// Behind AWS ALB / reverse proxy (X-Forwarded-For, X-Forwarded-Proto)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -42,6 +45,23 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
     next();
 });
+
+function sendLivenessJson(res: Response): void {
+    res.status(200).json({
+        status: 'ok',
+        service: 'ubc-ocpi-adaptor',
+        timestamp: new Date().toISOString(),
+    });
+}
+
+// Liveness (before other mounts). Point ALB to /health or /api/health if ingress redirects GET /.
+app.get('/', (_req: Request, res: Response) => sendLivenessJson(res));
+app.head('/', (_req: Request, res: Response) => res.status(200).end());
+app.get('/health', (_req: Request, res: Response) => sendLivenessJson(res));
+app.head('/health', (_req: Request, res: Response) => res.status(200).end());
+app.get('/live', (_req: Request, res: Response) => sendLivenessJson(res));
+app.head('/live', (_req: Request, res: Response) => res.status(200).end());
+
 // OCPI EMSP incoming (receiver) interface
 // - Versions:        /ocpi/versions
 // - Version details: /ocpi/2.2.1
@@ -64,15 +84,6 @@ app.use('/api/admin/commands', adminCommandsRoutes);
 app.use('/api/health', healthRoutes);
 
 app.use('/api/app', appRoutes);
-
-// Root endpoint
-app.get('/', (req: Request, res: Response) => {
-    res.json({
-        name: 'UBC OCPI Adaptor Base Url Running perfectly',
-        version: '1.0.0',
-        status: 'running',
-    });
-});
 
 // Error handling middleware
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {

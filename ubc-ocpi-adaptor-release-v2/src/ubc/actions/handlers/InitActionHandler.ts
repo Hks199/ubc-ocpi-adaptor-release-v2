@@ -161,7 +161,7 @@ export default class InitActionHandler {
                 { data: { response } }
             );
 
-            // Publish catalog with 5 minute reservation after on_init (async, non-blocking)
+            // Publish full partner catalog: engaged connector held 2 minutes (async, non-blocking)
             Utils.executeAsync(async () => {
                 try {
                     const chargePointConnectorId = reqPayload.message?.order?.['beckn:orderItems']?.[0]?.['beckn:orderedItem'];
@@ -169,10 +169,10 @@ export default class InitActionHandler {
                         // Fetch connector directly from DB using beckn_connector_id
                         const connectorData = await LocationDbService.getConnectorByBecknId(chargePointConnectorId);
                         if (connectorData) {
-                            // Reserve for 5 minutes (300 seconds) - publish only this connector
+                            const INIT_HOLD_SECONDS = 120; // 2 minutes — not bookable on that connector while init completes
                             await PublishActionService.publishWithReservation(
-                                connectorData.connector.connector_id, // OCPI connector_id
-                                300 // 5 minutes
+                                connectorData.connector.connector_id, // OCPI connector_id (resolves row + partner)
+                                INIT_HOLD_SECONDS,
                             );
                         }
                     }

@@ -12,7 +12,6 @@ import { ExtractedSelectRequestBody } from '../../schema/v2.0.0/actions/select/t
 import { ExtractedOnSelectResponseBody } from '../../schema/v2.0.0/actions/select/types/ExtractedOnSelectResponsePayload';
 import { OrderStatus } from '../../schema/v2.0.0/enums/OrderStatus';
 import { ObjectType } from '../../schema/v2.0.0/enums/ObjectType';
-import { ChargingSessionStatus } from '../../schema/v2.0.0/enums/ChargingSessionStatus';
 import { BecknDomain } from '../../schema/v2.0.0/enums/BecknDomain';
 import { UBCChargingMethod } from '../../schema/v2.0.0/enums/UBCChargingMethod';
 import BppOnixRequestService from '../../services/BppOnixRequestService';
@@ -20,9 +19,9 @@ import {
     BecknOrderValueResponse,
 } from '../../schema/v2.0.0/types/OrderValue';
 import { BecknOrderItemResponse } from '../../schema/v2.0.0/types/OrderItem';
-import { EvseConnectorDbService } from '../../../db-services/EvseConnectorDbService';
 import { OCPIv211PriceComponent, OCPIv211TariffElement } from '../../../ocpi/schema/modules/tariffs/types';
-import { Tariff } from '@prisma/client';
+import { EVSEConnector, Tariff } from '@prisma/client';
+import { convertOcpiStandardToConnectorType } from '../services/PublishActionService';
 import { TariffDbService } from '../../../db-services/TariffDbService';
 import { LocationDbService } from '../../../db-services/LocationDbService';
 import { calculateFinalAmount, buildOrderValueFromFinalAmount } from '../../utils/OrderValueCalculator';
@@ -35,6 +34,34 @@ import { BuyerFinderFeeEnum } from '../../schema/v2.0.0/enums/BuyerFinderFeeEnum
  * Handler for select action
  */
 export default class SelectActionHandler {
+
+    private static readonly SELECT_OFFER_VALIDITY_MS = 10 * 60 * 1000;
+
+    private static defaultCancellationPolicy(): {
+        fee: { percentage: string };
+        externalRef: { url: string; mimetype: string };
+    } {
+        return {
+            fee: { percentage: '10%' },
+            externalRef: {
+                url: 'https://becknprotocol.io/',
+                mimetype: 'text/html',
+            },
+        };
+    }
+
+    private static computeMaxPowerKWFromConnector(connector: EVSEConnector): number {
+        const explicitW = connector.max_electric_power != null ? Number(connector.max_electric_power) : 0;
+        if (Number.isFinite(explicitW) && explicitW > 0) {
+            return explicitW / 1000;
+        }
+        const v = Number(connector.max_voltage);
+        const a = Number(connector.max_amperage);
+        if (Number.isFinite(v) && Number.isFinite(a) && v > 0 && a > 0) {
+            return (v * a) / 1000;
+        }
+        return 1;
+    }
 
     public static async handleBppSelectRequest(
         req: Request
@@ -208,19 +235,15 @@ export default class SelectActionHandler {
     ): Promise<ExtractedOnSelectResponseBody> {
         const reqPayload = payload.payload;
         const {
-            seller_id,
             charge_point_connector_id,
             charging_option_type,
             charging_option_unit,
-            tariff,
-            charge_point_connector_type,
-            power_rating,
             buyerFinderFee,
         } = reqPayload;
         let chargingOptionUnit = Number(charging_option_unit);
 
         if(charging_option_type === UBCChargingMethod.Units) {
-            chargingOptionUnit = Number(chargingOptionUnit)/1000; // Convert kWh to Wh
+            chargingOptionUnit = Number(chargingOptionUnit)/1000; // Wh → kWh for tariff math
         }
         if(charging_option_type === UBCChargingMethod.Amount) {
             chargingOptionUnit = Number(chargingOptionUnit);
@@ -234,6 +257,14 @@ export default class SelectActionHandler {
         }
 
         const evseConnector = connectorData.connector;
+        const maxPowerKW = SelectActionHandler.computeMaxPowerKWFromConnector(evseConnector);
+        const connectorTypeLabel = convertOcpiStandardToConnectorType(evseConnector.standard);
+
+        let durationInMinutes: number | undefined;
+        if (charging_option_type === UBCChargingMethod.Units && maxPowerKW > 0) {
+            const kwh = chargingOptionUnit;
+            durationInMinutes = Math.max(1, Math.round((kwh / maxPowerKW) * 60));
+        }
 
         const ocpiTariff = await TariffDbService.getByOcpiTariffId(evseConnector.tariff_ids[0]);
         if (!ocpiTariff) {
@@ -244,8 +275,9 @@ export default class SelectActionHandler {
 
         const response: ExtractedOnSelectResponseBody = {
             payload: {
-                connector_type: charge_point_connector_type,
-                power_rating: power_rating,
+                connector_type: connectorTypeLabel,
+                power_rating: maxPowerKW,
+                duration_in_minutes: durationInMinutes,
                 'beckn:orderValue': orderValue,
             },
             metadata: {
@@ -274,14 +306,48 @@ export default class SelectActionHandler {
         // Per schema: on_select orderItems should NOT include beckn:lineId
         const priceFromBackend = backendPayloadData['beckn:price'];
         const priceFromOffer = selectAcceptedOffer?.['beckn:price'];
+
+        const now = new Date();
+        const offerValidityEnd = new Date(now.getTime() + SelectActionHandler.SELECT_OFFER_VALIDITY_MS);
+        const offerValidity = {
+            '@type': ObjectType.timePeriod,
+            'schema:startDate': now.toISOString(),
+            'schema:endDate': offerValidityEnd.toISOString(),
+        };
+
         const orderItemResponse: Record<string, unknown> = {
             'beckn:orderedItem': selectOrderItem['beckn:orderedItem'], // reuse from select
             'beckn:quantity': selectOrderItem['beckn:quantity'], // reuse from select
             'beckn:acceptedOffer': {
                 ...selectAcceptedOffer, // reuse from select (includes provider field)
+                'beckn:validity': offerValidity,
             },
             'beckn:price': priceFromBackend || priceFromOffer || {}, // add price
         };
+
+        const rawOrderAttrs = selectOrder['beckn:orderAttributes'] as Record<string, unknown> | undefined;
+        const sessionCtx = 'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld';
+        const connectorTypeFromBackend = backendPayloadData['connector_type'] as string | undefined;
+        const maxPowerFromBackend = backendPayloadData['power_rating'] as number | undefined;
+        const durationFromBackend = backendPayloadData['duration_in_minutes'] as number | undefined;
+
+        const mergedOrderAttributes: Record<string, unknown> = {
+            ...(rawOrderAttrs && typeof rawOrderAttrs === 'object' ? rawOrderAttrs : {}),
+            '@context': (rawOrderAttrs?.['@context'] as string) || sessionCtx,
+            '@type': (rawOrderAttrs?.['@type'] as string) || ObjectType.chargingSession,
+        };
+        if (connectorTypeFromBackend) {
+            mergedOrderAttributes.connectorType = connectorTypeFromBackend;
+        }
+        if (maxPowerFromBackend !== undefined && Number.isFinite(maxPowerFromBackend)) {
+            mergedOrderAttributes.maxPowerKW = maxPowerFromBackend;
+        }
+        if (durationFromBackend !== undefined && Number.isFinite(durationFromBackend)) {
+            mergedOrderAttributes.durationInMinutes = durationFromBackend;
+        }
+        if (!mergedOrderAttributes.cancellationPolicy) {
+            mergedOrderAttributes.cancellationPolicy = SelectActionHandler.defaultCancellationPolicy();
+        }
         
         // Get buyer from select order (it's in the request but not in the type definition)
         // Per schema example (lines 1122-1232): on_select should NOT include beckn:id or beckn:fulfillment
@@ -304,7 +370,7 @@ export default class SelectActionHandler {
                     "beckn:buyer": buyerWithMainContext as any, // Required per schema (lines 1127-1136), @context set to main
                     "beckn:orderItems": [orderItemResponse as any], // Cast to any since schema doesn't require lineId
                     "beckn:orderValue": orderValue,
-                    "beckn:orderAttributes": selectOrder["beckn:orderAttributes"],
+                    "beckn:orderAttributes": mergedOrderAttributes as any,
                     // Per schema: on_select should NOT include beckn:id or beckn:fulfillment
                 },
             },

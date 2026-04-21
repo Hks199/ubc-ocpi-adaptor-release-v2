@@ -6,14 +6,15 @@ export type BecknOfferAttributes = {
     "@context": string; // context URL
     "@type": ObjectType.chargingOffer;
     buyerFinderFee?: BuyerFinderFee;
+    /** UBC TSD order: currency, value, applicableQuantity */
     idleFeePolicy?: {
+        currency: string;
+        value: number;
         applicableQuantity: {
             unitCode: string;
             unitQuantity: number;
             unitText: string;
         };
-        currency: string;
-        value: number;
     };
     tariffModel?: string;
     offerType?: string;

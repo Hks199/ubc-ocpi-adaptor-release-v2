@@ -25,6 +25,13 @@ export type BecknOrderAttributes = {
     trackingStatus?: string;
     vehicleMake?: string;
     vehicleModel?: string;
+    /** Estimate helper for BAP → frontend (e.g. kWh at max power) */
+    durationInMinutes?: number;
+    /** Optional cancellation terms for estimate / order UI */
+    cancellationPolicy?: {
+        fee?: { percentage?: string };
+        externalRef?: { url?: string; mimetype?: string };
+    };
     sessionPreferences?: {
         preferredStartTime?: string;
         preferredEndTime?: string;

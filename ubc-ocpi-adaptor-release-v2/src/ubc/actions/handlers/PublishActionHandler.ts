@@ -10,29 +10,6 @@ import Utils from '../../../utils/Utils';
 import { axiosUpstreamErrorMeta } from '../../../utils/axiosUpstreamErrorMeta';
 import { databaseService } from '../../../services/database.service';
 
-/** Batch size for processing locations */
-const BATCH_SIZE = 15;
-/** Sleep time between batches in milliseconds */
-const BATCH_SLEEP_MS = 5000;
-
-/**
- * Helper function to sleep for specified milliseconds
- */
-function sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Helper function to split array into chunks
- */
-function chunkArray<T>(array: T[], chunkSize: number): T[][] {
-    const chunks: T[][] = [];
-    for (let i = 0; i < array.length; i += chunkSize) {
-        chunks.push(array.slice(i, i + chunkSize));
-    }
-    return chunks;
-}
-
 /**
  * Handler for publish action
  */
@@ -40,7 +17,7 @@ export default class PublishActionHandler {
     /**
      * Handles publish request - waits for stitched response from on_publish callback
      * Does not use requestWrapper because we need to wait for the callback before responding
-     * Processes locations in batches of 20 with 1 second delay between batches
+     * Publishes in a single CDS call (location batching disabled so the catalog is not overwritten per batch).
      */
     public static async handleBppPublishRequest(
         req: Request
@@ -54,20 +31,19 @@ export default class PublishActionHandler {
         });
 
         try {
-            // Process publish in batches
-            const { responses, totalCount } = await PublishActionHandler.handleBatchedPublish(payload);
+            const { responses, totalCount } = await PublishActionHandler.handlePublishSingleShot(payload);
 
-            logger.debug(`🟢 Returning batched publish response in handleBppPublishRequest`, {
+            logger.debug(`🟢 Returning publish response in handleBppPublishRequest`, {
                 totalBatches: responses.length,
-                totalCount: totalCount,
+                totalCount,
             });
 
             return {
                 httpStatus: 200,
                 payload: {
                     batchesProcessed: responses.length,
-                    responses: responses,
-                    totalCount: totalCount,
+                    responses,
+                    totalCount,
                 } as any,
             };
         }
@@ -80,102 +56,32 @@ export default class PublishActionHandler {
     }
 
     /**
-     * Handles batched publishing - processes locations in batches of 20 with 1 second delay
-     * Supports partner_id (fetches all location IDs), ocpi_location_ids, evse_ids, or connector_ids
+     * One CDS publish per request: full partner / full location list in a single merged catalog.
+     * (Previous location batching caused CDS replace semantics to leave only the last batch visible in the UI.)
      */
-    private static async handleBatchedPublish(
+    private static async handlePublishSingleShot(
         payload: PostAppPublishRequestPayload
     ): Promise<{ responses: AppPublishResponsePayload[], totalCount: number }> {
         const reqId = Utils.generateUUID();
-        const responses: AppPublishResponsePayload[] = [];
-        let allPublishedCount = 0;
 
-        // Determine what to batch based on payload type
         if (payload.partner_id) {
-            // Fetch all location IDs for the partner first
             const locationIds = await PublishActionHandler.getLocationIdsForPartner(payload.partner_id);
-            
             if (locationIds.length === 0) {
                 throw new Error(`No locations found for partner_id: ${payload.partner_id}`);
             }
-
-            logger.info(`🟡 [${reqId}] Processing ${locationIds.length} locations for partner ${payload.partner_id} in batches of ${BATCH_SIZE}`);
-
-            // Split into batches
-            const batches = chunkArray(locationIds, BATCH_SIZE);
-
-            for (let i = 0; i < batches.length; i++) {
-                const batch = batches[i];
-                logger.info(`🟡 [${reqId}] Processing batch ${i + 1}/${batches.length} with ${batch.length} locations`);
-
-                const batchPayload: PostAppPublishRequestPayload = {
-                    ...payload,
-                    ocpi_location_ids: batch,
-                    partner_id: undefined, // Clear partner_id since we're using location_ids
-                };
-
-                try {
-                    const {response, totalCount} = await PublishActionHandler.handleEVChargingUBCBppPublishAction(batchPayload);
-                    responses.push(response);
-                    allPublishedCount += totalCount;
-                    logger.info(`🟢 [${reqId}] Batch ${i + 1}/${batches.length} completed successfully`);
-                }
-                catch (e: any) {
-                    logger.error(`🔴 [${reqId}] Batch ${i + 1}/${batches.length} failed: ${e?.toString()}`, e);
-                    // Continue with next batch even if one fails
-                }
-
-                // Sleep between batches (except after the last one)
-                if (i < batches.length - 1) {
-                    logger.debug(`🟡 [${reqId}] Sleeping ${BATCH_SLEEP_MS}ms before next batch`);
-                    await sleep(BATCH_SLEEP_MS);
-                }
-            }
-        }
-        else if (payload.ocpi_location_ids && payload.ocpi_location_ids.length > BATCH_SIZE) {
-            // Batch the location IDs
-            const batches = chunkArray(payload.ocpi_location_ids, BATCH_SIZE);
-
-            logger.info(`🟡 [${reqId}] Processing ${payload.ocpi_location_ids.length} locations in ${batches.length} batches of ${BATCH_SIZE}`);
-
-            for (let i = 0; i < batches.length; i++) {
-                const batch = batches[i];
-                logger.info(`🟡 [${reqId}] Processing batch ${i + 1}/${batches.length} with ${batch.length} locations`);
-
-                const batchPayload: PostAppPublishRequestPayload = {
-                    ...payload,
-                    ocpi_location_ids: batch,
-                };
-
-                try {
-                    const {response, totalCount} = await PublishActionHandler.handleEVChargingUBCBppPublishAction(batchPayload);
-                    allPublishedCount += totalCount;
-                    responses.push(response);
-                    logger.info(`🟢 [${reqId}] Batch ${i + 1}/${batches.length} completed successfully`);
-                }
-                catch (e: any) {
-                    logger.error(`🔴 [${reqId}] Batch ${i + 1}/${batches.length} failed: ${e?.toString()}`, e);
-                    // Continue with next batch even if one fails
-                }
-
-                // Sleep between batches (except after the last one)
-                if (i < batches.length - 1) {
-                    logger.debug(`🟡 [${reqId}] Sleeping ${BATCH_SLEEP_MS}ms before next batch`);
-                    await sleep(BATCH_SLEEP_MS);
-                }
-            }
+            logger.info(
+                `🟡 [${reqId}] Single catalog publish: ${locationIds.length} location(s) for partner ${payload.partner_id} (batching disabled)`,
+            );
         }
         else {
-            // Small request or evse_ids/connector_ids - process directly without batching
-            logger.info(`🟡 [${reqId}] Processing single batch (small request or evse_ids/connector_ids)`);
-            const {response, totalCount} = await PublishActionHandler.handleEVChargingUBCBppPublishAction(payload);
-            allPublishedCount += totalCount;
-            responses.push(response);
+            logger.info(`🟡 [${reqId}] Single catalog publish (batching disabled)`);
         }
 
-        logger.info(`🟢 [${reqId}] Publish action completed. Total published count: ${allPublishedCount}`);
+        const { response, totalCount } = await PublishActionHandler.handleEVChargingUBCBppPublishAction(payload);
 
-        return { responses, totalCount: allPublishedCount };
+        logger.info(`🟢 [${reqId}] Publish completed. Total published count: ${totalCount}`);
+
+        return { responses: [response], totalCount };
     }
 
     /**

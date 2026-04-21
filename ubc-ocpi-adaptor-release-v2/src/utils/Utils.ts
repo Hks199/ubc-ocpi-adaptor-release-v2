@@ -203,7 +203,7 @@ export default class Utils {
     public static getBPPContext(params: {
         action: BecknAction,
         version: string,
-        domain: BecknDomain,
+        domain?: BecknDomain,
         bap_id?: string,
         bap_uri?: string,
         bpp_id?: string,
@@ -215,7 +215,7 @@ export default class Utils {
         const { action, version, domain, bap_id, bap_uri, bpp_id, bpp_uri, transaction_id, message_id, timestamp } = params;
 
         const context: Context = {
-            domain: domain,
+            ...(domain ? { domain } : {}),
             action: action,
             version: version,
             bpp_id: bpp_id || this.getBppId(),

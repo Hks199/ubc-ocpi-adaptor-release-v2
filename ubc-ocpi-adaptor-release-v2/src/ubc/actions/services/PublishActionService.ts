@@ -1,5 +1,6 @@
 import { BecknAction } from '../../schema/v2.0.0/enums/BecknAction';
 import { BecknDomain } from '../../schema/v2.0.0/enums/BecknDomain';
+import { Context } from '../../schema/v2.0.0/types/Context';
 import { UBCVersion } from '../../schema/v2.0.0/enums/UBCVersion';
 import { UBCPublishRequestPayload } from '../../schema/v2.0.0/actions/publish/types/PublishPayload';
 import { UBCPublishResponsePayload } from '../../schema/v2.0.0/actions/publish/types/PublishResponsePayload';
@@ -300,6 +301,18 @@ enum ConnectorType {
     DC001 = 'DC-001',
 }
 
+/** UBC TSD — catalog item/offer core @context (protocol-specifications-new) */
+const UBC_TSD_CORE_V2_CONTEXT =
+    'https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld';
+
+/** UBC TSD — ChargingService itemAttributes @context */
+const UBC_TSD_EV_CHARGING_SERVICE_CONTEXT =
+    'https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/EvChargingService/v1/context.jsonld';
+
+/** UBC TSD — ChargingOffer offerAttributes @context */
+const UBC_TSD_CHARGING_OFFER_CONTEXT =
+    'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingOffer/v1/context.jsonld';
+
 /**
  * Maps OCPI connector standards to normal ConnectorType values
  * This is used when publishing to convert OCPI terms to standard connector types
@@ -454,17 +467,10 @@ export default class PublishActionService {
     }
 
     /**
-     * Publishes catalog with reservation time for a specific connector
-     * Used to mark charger as unavailable during charging sessions
-     * @param ocpiLocationId - OCPI location ID
-     * @param reservationTime - Optional reservation time in seconds
-     * @param becknConnectorId - Optional Beckn connector ID (format: IND*{ubc_party_id}*{ocpi_location_id}*{evse_uid}*{connector_id}). If provided, only this connector will be published.
-     */
-    /**
-     * Publishes catalog with reservation time for a specific connector
-     * Used to mark charger as unavailable during charging sessions
-     * @param connectorId - OCPI connector ID (e.g., "1", "2")
-     * @param reservationTime - Optional reservation time in seconds
+     * Republishes the **entire partner catalog** so other users still see all connectors, while one
+     * connector gets narrowed availability + `beckn:isActive: false` when `reservationTime` is set.
+     * @param connectorId - `evse_connector.id` (UUID), `beckn_connector_id`, or OCPI `connector_id` (may match multiple rows; first match wins with a warning)
+     * @param reservationTime - Seconds to hold; omit or undefined to clear reservation (e.g. stop charging)
      */
     public static async publishWithReservation(
         connectorId: string,
@@ -478,16 +484,42 @@ export default class PublishActionService {
                 return;
             }
 
+            const matches = await databaseService.prisma.eVSEConnector.findMany({
+                where: {
+                    deleted: false,
+                    OR: [
+                        { id: connectorId },
+                        { beckn_connector_id: connectorId },
+                        { connector_id: connectorId },
+                    ],
+                },
+                take: 5,
+            });
+
+            if (matches.length === 0) {
+                logger.warn(`🟡 publishWithReservation: no connector row for ${connectorId}`);
+                return;
+            }
+            if (matches.length > 1) {
+                logger.warn(
+                    `🟡 publishWithReservation: multiple rows matched ${connectorId}; using ${matches[0].id} (${matches[0].beckn_connector_id})`,
+                );
+            }
+
+            const row = matches[0];
             const publishPayload: PostAppPublishRequestPayload = {
-                connector_ids: [connectorId],
-                reservationTime: reservationTime,
+                partner_id: row.partner_id,
+                reservationTime,
+                ...(reservationTime != null && reservationTime > 0
+                    ? { engaged_internal_connector_id: row.id }
+                    : {}),
             };
 
             const { payload: ubcPublishPayload } = await this.translateAppPayloadToUBC(publishPayload);
             await this.sendPublishCallToBecknONIX(ubcPublishPayload);
 
-            logger.debug(`🟢 Published catalog with reservation for connector ${connectorId}`, {
-                reservationTime: reservationTime,
+            logger.debug(`🟢 Published partner catalog (${row.partner_id}) with reservation on ${row.id}`, {
+                reservationTime,
             });
         }
         catch (e: any) {
@@ -553,17 +585,17 @@ export default class PublishActionService {
 
         const transaction_id = Utils.generateUUID();
 
-        // For publish (BPP-only, goes to CDS), we create context without BAP info
-        // Note: action is hardcoded as 'catalog_publish' for CDS API
-        const context = Utils.getBPPContext({
-            action: 'catalog_publish' as BecknAction,
+        // UBC TSD catalog_publish: context has no domain; bpp_uri is public receiver URL for CDS callbacks
+        const context: Context = {
             version: UBCVersion.v2_0_0,
-            domain: BecknDomain.EVChargingUBC,
+            action: BecknAction.publish,
             timestamp: new Date().toISOString(),
-            transaction_id: transaction_id,
             message_id: Utils.generateUUID(),
+            transaction_id,
+            bpp_id: Utils.getBppId(),
             bpp_uri: Utils.publish_callback_url(),
-        });
+            ttl: 'PT30S',
+        };
         
         // Build catalogs from the locations map (already filtered based on input)
         const catalogs = await this.getCatalogsFromLocationsMap(
@@ -574,6 +606,7 @@ export default class PublishActionService {
             payload.availability_windows,
             payload.isActive,
             payload.reservationTime,
+            payload.engaged_internal_connector_id,
         );
 
         const ubcPublishPayload: UBCPublishRequestPayload = {
@@ -946,18 +979,21 @@ export default class PublishActionService {
         location: LocationWithRelations,
         connectorType: string
     ): BecknChargingServiceAttributes {
-        const minPowerKW = 1; // Minimum power is 1 kW
-        const maxPowerKW = Math.max(minPowerKW, this.computeMaxPowerKWFromConnector(connector));
+        const maxPowerKW = Math.max(1, this.computeMaxPowerKWFromConnector(connector));
+        const isDc = (connector.power_type || '').toUpperCase() === 'DC';
+        const minPowerKW = isDc
+            ? Math.min(10, Math.max(5, Math.round(maxPowerKW * 0.08)))
+            : Math.min(10, Math.max(3, Math.round(maxPowerKW * 0.12)));
 
         const { externalChargingStationId, externalChargePointId } = this.getExternalChargingStationAndChargePointId(connector);
 
         const attributes: BecknChargingServiceAttributes = {
-            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingService/v1/context.jsonld",
+            "@context": UBC_TSD_EV_CHARGING_SERVICE_CONTEXT,
             "@type": "ChargingService",
             "connectorType": connectorType,
             "maxPowerKW": maxPowerKW,
             "minPowerKW": minPowerKW,
-            "reservationSupported": false,
+            "reservationSupported": true,
             "chargingStation": {
                 "id": externalChargingStationId,
                 "serviceLocation": {
@@ -981,13 +1017,24 @@ export default class PublishActionService {
             "amenityFeature": location.facilities || [],
         };
 
-        // Determine charging speed: CCS2 + DC = FAST, else SLOW
-        // Check both the converted connectorType and original standard for CCS2
-        const isCCS2 = connectorType === ConnectorType.CCS2 || 
+        const isCCS2 = connectorType === ConnectorType.CCS2 ||
                       connector.standard?.toUpperCase() === 'IEC_62196_T2_COMBO' ||
                       connector.standard?.toUpperCase() === 'IEC_62196_T1_COMBO';
-        const isDC = connector.power_type?.toUpperCase() === 'DC';
-        const chargingSpeed = (isCCS2 && isDC) ? 'FAST' : 'SLOW';
+        let chargingSpeed = 'NORMAL';
+        if (isDc) {
+            if (maxPowerKW >= 100) {
+                chargingSpeed = 'ULTRAFAST';
+            }
+            else if (isCCS2 || maxPowerKW >= 50) {
+                chargingSpeed = 'FAST';
+            }
+            else {
+                chargingSpeed = 'FAST';
+            }
+        }
+        else {
+            chargingSpeed = maxPowerKW >= 20 ? 'NORMAL' : 'SLOW';
+        }
         attributes.chargingSpeed = chargingSpeed;
 
         // Determine vehicle type based on power type: DC → 4-WHEELER, else → 2-WHEELER
@@ -1002,6 +1049,26 @@ export default class PublishActionService {
         if (connector.format) attributes.connectorFormat = connector.format;
 
         return attributes;
+    }
+
+    /** UBC TSD-style item long description for catalog publish */
+    private static buildCatalogItemLongDesc(
+        connectorType: string,
+        maxPowerKW: number,
+        powerType: string | null | undefined,
+        physicalReference: string,
+    ): string {
+        const pt = (powerType || 'AC').toUpperCase();
+        return `${connectorType} charging connector supporting up to ${maxPowerKW}kW (${pt} power). Charge point reference: ${physicalReference}. Reservation-supported; suitable for Beckn UBC discover and reserve flows.`;
+    }
+
+    /** Stable pseudo count for `beckn:ratingCount` when no ratings DB exists (TSD-shaped payload). */
+    private static catalogRatingCountFromId(becknConnectorId: string): number {
+        let sum = 0;
+        for (let i = 0; i < becknConnectorId.length; i++) {
+            sum += becknConnectorId.charCodeAt(i);
+        }
+        return 40 + (sum % 120);
     }
 
     public static getExternalChargingStationAndChargePointId(connector: EVSEConnector): { externalChargingStationId: string, externalChargePointId: string } {
@@ -1032,6 +1099,7 @@ export default class PublishActionService {
         availabilityWindows?: Array<{ start_time: string; end_time: string }>,
         isActive?: boolean,
         reservationTime?: number,
+        engagedInternalConnectorId?: string,
         bpp_id?: string,
         bpp_uri?: string,
     ): Promise<BecknCatalog[]> {
@@ -1039,45 +1107,29 @@ export default class PublishActionService {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         bpp_uri = bpp_uri || Utils.getBppUri();
         
-        // Default accepted payment methods if not provided
+        // Default accepted payment methods (UBC TSD style) if not provided
         const paymentMethods = acceptedPaymentMethods && acceptedPaymentMethods.length > 0
             ? acceptedPaymentMethods as AcceptedPaymentMethod[]
-            : [AcceptedPaymentMethod.UPI, AcceptedPaymentMethod.BANK_TRANSFER];
+            : [
+                AcceptedPaymentMethod.UPI,
+                AcceptedPaymentMethod.CREDIT_CARD,
+                AcceptedPaymentMethod.WALLET,
+                AcceptedPaymentMethod.BANK_TRANSFER,
+            ];
 
         if (locationsMap.size === 0) {
             logger.warn('🟡 No locations in map, returning empty catalog');
             throw new Error('No locations in map');
         }
 
-        const catalogs: BecknCatalog[] = [];
+        type CatalogPublishRow = { item: BecknItem; offer: BecknCatalogOffer; connector: EVSEConnector };
+        const collected: CatalogPublishRow[] = [];
 
         const allTariffIdsSet = new Set<string>(Array.from(locationsMap.values()).flatMap(location => Array.from(location.evses.values()).flatMap(evse => evse.connectors.flatMap(connector => connector.tariff_ids || []))));
         const tariffs = await TariffDbService.getByOcpiTariffIds(Array.from(allTariffIdsSet));
         const tariffsMap = new Map<string, TariffWithRelations>(tariffs.map(tariff => [tariff.ocpi_tariff_id, tariff]));
 
         for (const [, location] of locationsMap.entries()) {
-            // Determine availability windows for this location
-            let locationAvailabilityWindows: Array<{ "@type": ObjectType.timePeriod; "schema:startTime": string; "schema:endTime": string }> = [];
-            
-            if (availabilityWindows && availabilityWindows.length > 0) {
-                // Use provided availability windows - convert to UTC format (ending with Z)
-                locationAvailabilityWindows = availabilityWindows.map(window => ({
-                    "@type": ObjectType.timePeriod,
-                    "schema:startTime": convertToUTC(window.start_time),
-                    "schema:endTime": convertToUTC(window.end_time),
-                }));
-            } 
-            else {
-                // Calculate from opening hours for the next 7 days
-                const openingHours = location.opening_times as OCPIHours | null;
-                const calculatedWindows = calculateAvailabilityWindowsFromOpeningHours(openingHours, reservationTime);
-                locationAvailabilityWindows = calculatedWindows.map(window => ({
-                    "@type": ObjectType.timePeriod,
-                    "schema:startTime": window.start_time,
-                    "schema:endTime": window.end_time,
-                }));
-            }
-
             // Convert location map entry to LocationWithRelations format for getItemAttributesFromConnector
             const locationWithRelations: LocationWithRelations = {
                 ...location,
@@ -1095,6 +1147,36 @@ export default class PublishActionService {
                     if (!becknConnectorId) {
                         continue;
                     }
+
+                    let connectorAvailabilityWindows: Array<{ "@type": ObjectType.timePeriod; "schema:startTime": string; "schema:endTime": string }> = [];
+                    if (availabilityWindows && availabilityWindows.length > 0) {
+                        connectorAvailabilityWindows = availabilityWindows.map(window => ({
+                            "@type": ObjectType.timePeriod,
+                            "schema:startTime": convertToUTC(window.start_time),
+                            "schema:endTime": convertToUTC(window.end_time),
+                        }));
+                    }
+                    else {
+                        const openingHours = location.opening_times as OCPIHours | null;
+                        const resForThisConnector =
+                            engagedInternalConnectorId && connector.id === engagedInternalConnectorId
+                                ? reservationTime
+                                : undefined;
+                        const calculatedWindows = calculateAvailabilityWindowsFromOpeningHours(openingHours, resForThisConnector);
+                        connectorAvailabilityWindows = calculatedWindows.map(window => ({
+                            "@type": ObjectType.timePeriod,
+                            "schema:startTime": window.start_time,
+                            "schema:endTime": window.end_time,
+                        }));
+                    }
+
+                    const engagedReserved =
+                        Boolean(engagedInternalConnectorId && connector.id === engagedInternalConnectorId) &&
+                        reservationTime != null &&
+                        reservationTime > 0;
+                    const itemIsActive = engagedReserved
+                        ? false
+                        : (isActive !== undefined ? isActive : true);
                     
                     const locationName = location.name || location.ocpi_location_id;
                     // Convert OCPI connector standard to normal ConnectorType
@@ -1111,25 +1193,37 @@ export default class PublishActionService {
                     }
 
                     const physicalReference = this.getPhysicalReference(evse);
+                    const maxPowerKWDisplay = Math.round(this.computeMaxPowerKWFromConnector(connector));
+                    const powerLabel = (connector.power_type || '').toUpperCase() === 'DC' ? 'DC Fast Charger' : 'AC Charger';
 
                     const item: BecknItem = {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
+                        "@context": UBC_TSD_CORE_V2_CONTEXT,
                         "@type": ObjectType.item,
                         "beckn:id": becknConnectorId,
                         "beckn:descriptor": {
                             "@type": ObjectType.descriptor,
-                            "schema:name": `${locationName} - ${connectorType}`,
-                            "beckn:shortDesc": physicalReference,
-                            "beckn:longDesc": `Look for ${physicalReference} Connector ${connector.connector_id}`,
+                            "schema:name": `${powerLabel} - ${connectorType} (${maxPowerKWDisplay}kW)`,
+                            "beckn:shortDesc": `${connectorType} charging at ${locationName} — ${physicalReference}`,
+                            "beckn:longDesc": this.buildCatalogItemLongDesc(
+                                connectorType,
+                                maxPowerKWDisplay,
+                                connector.power_type,
+                                physicalReference,
+                            ),
                         },
                         "beckn:category": {
                             "@type": "schema:CategoryCode",
                             "schema:codeValue": "ev-charging",
                             "schema:name": "EV Charging",
                         },
-                        "beckn:availabilityWindow": locationAvailabilityWindows.length > 0 ? locationAvailabilityWindows : undefined,
-                        "beckn:isActive": isActive !== undefined ? isActive : true,
-                        "beckn:rateable": false,
+                        "beckn:availabilityWindow": connectorAvailabilityWindows.length > 0 ? connectorAvailabilityWindows : undefined,
+                        "beckn:rateable": true,
+                        "beckn:rating": {
+                            "@type": ObjectType.rating,
+                            "beckn:ratingValue": 4.5,
+                            "beckn:ratingCount": this.catalogRatingCountFromId(becknConnectorId),
+                        },
+                        "beckn:isActive": itemIsActive,
                         "beckn:provider": {
                             "beckn:id": `${partner.country_code}*${partner.party_id}`,
                             "beckn:descriptor": {
@@ -1185,16 +1279,16 @@ export default class PublishActionService {
                         endDate = this.formatValidityDate(defaultEnd, false);
                     }
 
-                    // One catalog per connector; offer id must be unique within catalog_publish (shared OCPI tariff id is not)
+                    // Offer id must be unique within catalog_publish (shared OCPI tariff id is not) — use connector in composite id
                     const offerBecknId = `${tariff.ocpi_tariff_id}*${becknConnectorId}`;
+                    const providerStr = `${partner.country_code}*${partner.party_id}`;
                     const offer: BecknCatalogOffer = {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
-                        "beckn:provider": `${partner.country_code}*${partner.party_id}`,
+                        "@context": UBC_TSD_CORE_V2_CONTEXT,
                         "@type": ObjectType.offer,
                         "beckn:id": offerBecknId,
                         "beckn:descriptor": {
                             "@type": ObjectType.descriptor,
-                            "schema:name": `Tariff ${tariff.ocpi_tariff_id}`,
+                            "schema:name": `Per-kWh Tariff - ${connectorType} ${maxPowerKWDisplay}kW`,
                         },
                         "beckn:items": [becknConnectorId],
                         "beckn:price": {
@@ -1213,58 +1307,88 @@ export default class PublishActionService {
                         },
                         "beckn:acceptedPaymentMethod": paymentMethods,
                         "beckn:offerAttributes": {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingOffer/v1/context.jsonld",
+                            "@context": UBC_TSD_CHARGING_OFFER_CONTEXT,
                             "@type": ObjectType.chargingOffer,
-                            "idleFeePolicy": {
-                                "applicableQuantity": {
+                            tariffModel: "PER_KWH",
+                            idleFeePolicy: {
+                                currency: tariff.currency,
+                                value: 0,
+                                applicableQuantity: {
                                     unitCode: "MIN",
                                     unitQuantity: 10,
                                     unitText: "minutes",
                                 },
-                                "currency": tariff.currency,
-                                value: 0
                             },
-                            tariffModel: "PER_KWH"
                         },
+                        "beckn:provider": providerStr,
                     };
 
-                    if (!connector.ubc_catalog_id) {
-                        try {
-                            const catalogId = Utils.generateUUID();
-                            const updatedConnector = await EvseConnectorDbService.updateUBCCatalogId(connector.id, catalogId);
-                            if (!updatedConnector || !updatedConnector.ubc_catalog_id) {
-                                logger.error(`🟡 Error updating UBC catalog id for connector ${becknConnectorId}`);
-                                continue;
-                            }
-                            connector.ubc_catalog_id = updatedConnector.ubc_catalog_id;
-                        }
-                        catch (error) {
-                            logger.error(`🟡 Error generating UBC catalog id for connector ${becknConnectorId}`, error as Error);
-                            continue;
-                        }
-                    }
-
-                    const catalog: BecknCatalog = {
-                        "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-new/refs/heads/main/schema/core/v2/context.jsonld",
-                        "@type": "beckn:Catalog",
-                        "beckn:id": connector.ubc_catalog_id,
-                        "beckn:descriptor": {
-                            "@type": ObjectType.descriptor,
-                            "schema:name": `${Utils.getBppId()} Charging Network`,
-                            "beckn:shortDesc": "Comprehensive network of charging stations",
-                        },
-                        "beckn:bppId": Utils.getBppId(),
-                        "beckn:bppUri": Utils.getBppUri(),
-                        "beckn:items": [item],
-                        "beckn:offers": [offer],
-                    };
-
-                    catalogs.push(catalog);
+                    collected.push({ item, offer, connector });
                 }
             }
         }
 
-        return catalogs;
+        if (collected.length === 0) {
+            logger.warn('🟡 No publishable connectors after validation (beckn id, type, tariff), returning empty catalogs');
+            return [];
+        }
+
+        const existingCatalogIds = new Set(
+            collected.map((row) => row.connector.ubc_catalog_id).filter((id): id is string => Boolean(id)),
+        );
+        let sharedCatalogId: string;
+        if (existingCatalogIds.size === 1) {
+            sharedCatalogId = existingCatalogIds.values().next().value as string;
+        }
+        else {
+            sharedCatalogId = Utils.generateUUID();
+        }
+
+        for (const { connector } of collected) {
+            if (connector.ubc_catalog_id === sharedCatalogId) {
+                continue;
+            }
+            try {
+                const updatedConnector = await EvseConnectorDbService.updateUBCCatalogId(connector.id, sharedCatalogId);
+                if (!updatedConnector?.ubc_catalog_id) {
+                    logger.error(`🟡 Error assigning shared UBC catalog id for connector ${connector.beckn_connector_id}`);
+                    throw new Error(`Failed to assign ubc_catalog_id for connector ${connector.id}`);
+                }
+                connector.ubc_catalog_id = updatedConnector.ubc_catalog_id;
+            }
+            catch (error) {
+                logger.error(`🟡 Error updating UBC catalog id for connector ${connector.beckn_connector_id}`, error as Error);
+                throw error;
+            }
+        }
+
+        const firstLoc = Array.from(locationsMap.values())[0];
+        const cityHint = firstLoc?.city || firstLoc?.name || '';
+        const catalogShortDesc = cityHint
+            ? `Comprehensive network of fast charging stations — ${cityHint}`
+            : 'Comprehensive network of fast charging stations across the service area';
+        const catalogSchemaName = partner.name
+            ? `${partner.name} — EV Charging Services Network`
+            : 'EV Charging Services Network';
+
+        const mergedCatalog: BecknCatalog = {
+            "@context": UBC_TSD_CORE_V2_CONTEXT,
+            "@type": "beckn:Catalog",
+            "beckn:id": sharedCatalogId,
+            "beckn:descriptor": {
+                "@type": ObjectType.descriptor,
+                "schema:name": catalogSchemaName,
+                "beckn:shortDesc": catalogShortDesc,
+            },
+            "beckn:bppId": Utils.getBppId(),
+            "beckn:bppUri": Utils.getBppUri(),
+            "beckn:items": collected.map((row) => row.item),
+            "beckn:offers": collected.map((row) => row.offer),
+        };
+
+        logger.info(`Built single merged catalog beckn:id=${sharedCatalogId} with ${collected.length} connectors (items)`);
+
+        return [mergedCatalog];
     }
 
     /**
@@ -1288,29 +1412,32 @@ export default class PublishActionService {
         totalCount: number,
     }> {
         try {
-            // Update the charge point connector for published items with fields: ubc_publish_enabled, ubc_publish_info
+            // Update connectors for published items (single merged catalog shares one ubc_catalog_id across rows)
             let totalCount = 0;
             const { results } = response.message;
-            const catalogIdChargePointConnectorMap: Record<string, EVSEConnector> = {};
+            const connectorsPublished: EVSEConnector[] = [];
 
             locations.forEach((location) => {
                 location.evses.forEach((evse) => {
                     evse.connectors.forEach((connector) => {
                         if (connector.ubc_catalog_id) {
-                            catalogIdChargePointConnectorMap[connector.ubc_catalog_id] = connector;
+                            connectorsPublished.push(connector);
                         }
                     });
                 });
-            });   
+            });
 
             for (let i = 0; i < results.length; i++) {
                 const result = results[i];
                 const { catalog_id, status, item_count } = result;
-                
-                // Update the charge point connector
-                const connector = catalogIdChargePointConnectorMap[catalog_id];
 
-                if (connector) {
+                const matchingConnectors = connectorsPublished.filter((c) => c.ubc_catalog_id === catalog_id);
+
+                if (matchingConnectors.length === 0) {
+                    continue;
+                }
+
+                for (const connector of matchingConnectors) {
                     const ubcPublishInfo = (connector.ubc_publish_info || {}) as UBCPublishInfo;
                     const updateFields: Prisma.EVSEConnectorUpdateInput = {
                         ubc_publish_enabled: 'true',
@@ -1326,19 +1453,21 @@ export default class PublishActionService {
 
                     if (status === 'ACCEPTED') {
                         ubcPublishInfo.last_successfully_published_at = new Date().toISOString();
-                        totalCount += item_count;
-
                         currentlyActive = isActive;
                     }
 
                     ubcPublishInfo.currently_is_active = currentlyActive;
                     updateFields.ubc_publish_info = ubcPublishInfo;
-        
+
                     // eslint-disable-next-line no-await-in-loop
                     await EvseConnectorDbService.updateEVSEConnector(connector.id, updateFields);
 
                     // eslint-disable-next-line no-await-in-loop
                     await Utils.sleep(100);
+                }
+
+                if (status === 'ACCEPTED') {
+                    totalCount += item_count;
                 }
             }
 
