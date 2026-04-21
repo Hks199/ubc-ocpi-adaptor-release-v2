@@ -430,9 +430,12 @@ export default class InitActionHandler {
                     `🟡 Payment link generation failed for partner ${evseConnector.partner_id}, using dummy paymentURL: ${e?.message}`,
                     { data: { partner_id: evseConnector.partner_id, authorization_reference: authorizationReference } }
                 );
-                // Dummy URL so BAP frontend doesn't error on empty paymentURL during UAT testing
-                paymentLink = `https://pay.ubc.test/upi?ref=${authorizationReference}`;
+                paymentLink = InitActionHandler.getPaymentUrlFallback(authorizationReference);
             }
+        }
+
+        if (beneficiary === 'BPP' && !paymentLink?.trim()) {
+            paymentLink = InitActionHandler.getPaymentUrlFallback(authorizationReference);
         }
 
         const extractedOnInitResponseBody: ExtractedOnInitResponseBody = {
@@ -469,6 +472,20 @@ export default class InitActionHandler {
         return extractedOnInitResponseBody;
     }
 
+    /**
+     * Non-empty payment URL for on_init when Razorpay/CPO returns no link (avoids empty beckn:paymentURL).
+     * Override with BECKN_INIT_PAYMENT_URL_FALLBACK (optional query string; ref= is appended).
+     */
+    public static getPaymentUrlFallback(authorizationReference: string): string {
+        const base = process.env.BECKN_INIT_PAYMENT_URL_FALLBACK?.trim();
+        const ref = encodeURIComponent(authorizationReference);
+        if (base) {
+            const sep = base.includes('?') ? '&' : '?';
+            return `${base}${sep}ref=${ref}`;
+        }
+        return `https://pay.ubc.test/upi?ref=${ref}`;
+    }
+
     public static async generatePaymentLink(
         payload: GeneratePaymentLinkRequestPayload,
         paymentTxn: PaymentTxn,
@@ -480,19 +497,32 @@ export default class InitActionHandler {
         }
         const ocpiPartnerAdditionalProps =
             ocpiPartner?.additional_props as OCPIPartnerAdditionalProps;
-        
+
+        let result: GeneratePaymentLinkResponsePayload;
         if (ocpiPartnerAdditionalProps?.payment_service_provider === PaymentServiceProvider.CPO) {
-            return await this.sendGeneratePaymentLinkCallToBackend(payload, paymentTxn.partner_id);
+            result = await this.sendGeneratePaymentLinkCallToBackend(payload, paymentTxn.partner_id);
         }
         else {
-            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as  CreateUPIPaymentWithRazorpayResponse;
+            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as CreateUPIPaymentWithRazorpayResponse;
 
-            return {
+            result = {
                 payment_link: paymentGatewayOrder.payment?.link || '',
                 authorization_reference: paymentTxn.authorization_reference,
             };
-        
         }
+
+        const authRef = String(
+            result.authorization_reference || paymentTxn.authorization_reference || paymentTxn.id
+        );
+        if (!result.payment_link?.trim()) {
+            const fallback = InitActionHandler.getPaymentUrlFallback(authRef);
+            logger.warn('Payment link empty after gateway/CPO; using fallback URL for on_init', {
+                data: { partner_id: paymentTxn.partner_id, authorization_reference: authRef },
+            });
+            return { ...result, payment_link: fallback };
+        }
+
+        return result;
     }
 
     public static async sendGeneratePaymentLinkCallToBackend(

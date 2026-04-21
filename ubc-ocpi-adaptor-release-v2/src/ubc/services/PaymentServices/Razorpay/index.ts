@@ -35,6 +35,11 @@ import {
 } from '../../../../types/Razorpay';
 import PaymentTxnDbService from '../../../../db-services/PaymentTxnDbService';
 import GenericPaymentService from '../Generic';
+import {
+    buildSyntheticOrderResponse,
+    buildSyntheticUpiPaymentResponse,
+    shouldUseSyntheticRazorpayWhenNoCredentials,
+} from './razorpaySynthetic.util';
 
 // Helper function to extract error message from unknown error
 const getErrorMessage = (error: unknown): string => {
@@ -151,6 +156,18 @@ export default class RazorpayPaymentGatewayService {
         try {
             const razorpayCredentials = await this.getCredentials(partnerId);
             if (!razorpayCredentials || !razorpayCredentials.credentials) {
+                if (shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                    const synthetic = buildSyntheticOrderResponse(order);
+                    logger.warn('Razorpay: creating synthetic order (no credentials)', {
+                        partnerId,
+                        order_id: synthetic.id,
+                    });
+                    return {
+                        success: true,
+                        razorpay_order: synthetic,
+                        external_integration_id: 'synthetic',
+                    };
+                }
                 logger.error('Razorpay: Failed to create order - External Integration not found', undefined, {
                     order,
                     partnerId,
@@ -163,6 +180,22 @@ export default class RazorpayPaymentGatewayService {
                 key_secret: keySecret,
                 api_url: apiUrl,
             } = razorpayCredentials.credentials;
+
+            if (!keyId?.trim() || !keySecret?.trim()) {
+                if (shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                    const synthetic = buildSyntheticOrderResponse(order);
+                    logger.warn('Razorpay: creating synthetic order (empty key id/secret)', {
+                        partnerId,
+                        order_id: synthetic.id,
+                    });
+                    return {
+                        success: true,
+                        razorpay_order: synthetic,
+                        external_integration_id: 'synthetic',
+                    };
+                }
+                return { success: false, error: 'Razorpay credentials not found for partner' };
+            }
 
             logger.info('Razorpay: Creating order', {
                 amount: order.amount,
@@ -234,6 +267,24 @@ export default class RazorpayPaymentGatewayService {
         try {
             const razorpayCredentials = await this.getCredentials(partnerId);
             if (!razorpayCredentials || !razorpayCredentials.credentials) {
+                if (shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                    const notes = request.notes as Record<string, string> | undefined;
+                    const payment = buildSyntheticUpiPaymentResponse(
+                        request.order_id,
+                        request.amount,
+                        notes
+                    );
+                    logger.warn('Razorpay: synthetic UPI payment (no credentials)', {
+                        partnerId,
+                        order_id: request.order_id,
+                        has_link: !!payment.link,
+                    });
+                    return {
+                        success: true,
+                        payment,
+                        external_integration_id: 'synthetic',
+                    };
+                }
                 logger.error('Razorpay: Failed to create UPI payment - External Integration not found', undefined, {
                     request,
                     partnerId,
@@ -246,6 +297,27 @@ export default class RazorpayPaymentGatewayService {
                 key_secret: keySecret,
                 api_url: apiUrl,
             } = razorpayCredentials.credentials;
+
+            if (!keyId?.trim() || !keySecret?.trim()) {
+                if (shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                    const notes = request.notes as Record<string, string> | undefined;
+                    const payment = buildSyntheticUpiPaymentResponse(
+                        request.order_id,
+                        request.amount,
+                        notes
+                    );
+                    logger.warn('Razorpay: synthetic UPI payment (empty credentials)', {
+                        partnerId,
+                        order_id: request.order_id,
+                    });
+                    return {
+                        success: true,
+                        payment,
+                        external_integration_id: 'synthetic',
+                    };
+                }
+                return { success: false, error: 'Razorpay credentials not found for partner' };
+            }
 
             // Build clean request with only required fields to avoid fee tampering errors
             // Razorpay S2S UPI requires: amount, currency, order_id, email, contact, method, upi

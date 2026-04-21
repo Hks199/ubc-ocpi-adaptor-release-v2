@@ -59,32 +59,41 @@ export default class RazorpayInitializerService {
             const additionalProps = ocpiPartner.additional_props as OCPIPartnerAdditionalProps;
             const razorpayConfig = additionalProps?.payment_services?.Razorpay;
 
-            if (!razorpayConfig) {
-                logger.warn(`Razorpay: No Razorpay configuration found in partner config for partnerId: ${partnerId}`);
-                return null;
-            }
+            const envKeyId = process.env.RAZORPAY_KEY_ID?.trim();
+            const envKeySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+            const envApiUrl = process.env.RAZORPAY_API_URL?.trim() || 'https://api.razorpay.com/v1';
 
-            // Map OCPIPartnerAdditionalProps to RazorpayCredentials
+            // Map DB + env: env fills missing partner keys (UAT / ops without DB payment_services block)
             const credentials: RazorpayCredentials = {
-                KEY_ID: razorpayConfig.KEY_ID,
-                KEY_SECRET: razorpayConfig.KEY_SECRET,
-                API_URL: razorpayConfig.API_URL || 'https://api.razorpay.com/v1',
-                WEBHOOK_SECRET: razorpayConfig.WEBHOOK_SECRET,
-                FEE_PERCENTAGE: razorpayConfig.FEE_PERCENTAGE || 0.2,
+                KEY_ID: (razorpayConfig?.KEY_ID || envKeyId || '') as string,
+                KEY_SECRET: (razorpayConfig?.KEY_SECRET || envKeySecret || '') as string,
+                API_URL: razorpayConfig?.API_URL || envApiUrl || 'https://api.razorpay.com/v1',
+                WEBHOOK_SECRET: razorpayConfig?.WEBHOOK_SECRET || process.env.RAZORPAY_WEBHOOK_SECRET?.trim(),
+                FEE_PERCENTAGE: razorpayConfig?.FEE_PERCENTAGE ?? 0.2,
             };
 
-            // Validate that we have all required credentials
-            if (!credentials.KEY_ID || !credentials.KEY_SECRET || !credentials.FEE_PERCENTAGE) {
-                logger.error(`Razorpay: Missing required credentials in partner config`, undefined, {
-                    partnerId,
-                    hasKeyId: !!credentials.KEY_ID,
-                    hasKeySecret: !!credentials.KEY_SECRET,
-                    hasFeePercentage: !!credentials.FEE_PERCENTAGE,
-                });
+            if (!credentials.KEY_ID || !credentials.KEY_SECRET) {
+                if (!razorpayConfig) {
+                    logger.warn(
+                        `Razorpay: No partner Razorpay block and no RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET for partnerId: ${partnerId}`
+                    );
+                }
+                else {
+                    logger.error(`Razorpay: Missing required credentials (partner + env) for partnerId: ${partnerId}`, undefined, {
+                        partnerId,
+                        hasKeyId: !!credentials.KEY_ID,
+                        hasKeySecret: !!credentials.KEY_SECRET,
+                    });
+                }
                 return null;
             }
 
-            logger.info(`Razorpay credentials loaded from partner config for partnerId: ${partnerId}`);
+            if (razorpayConfig) {
+                logger.info(`Razorpay credentials loaded (partner config, env may supplement) for partnerId: ${partnerId}`);
+            }
+            else {
+                logger.info(`Razorpay credentials loaded from environment for partnerId: ${partnerId}`);
+            }
 
             // Cache the credentials
             const cacheEntry: RazorpayCacheEntry = {
