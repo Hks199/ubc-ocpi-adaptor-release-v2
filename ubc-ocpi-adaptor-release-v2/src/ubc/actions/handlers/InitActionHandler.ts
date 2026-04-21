@@ -427,10 +427,11 @@ export default class InitActionHandler {
             }
             catch (e: any) {
                 logger.warn(
-                    `🟡 Payment link generation failed for partner ${evseConnector.partner_id}, proceeding with empty paymentURL: ${e?.message}`,
+                    `🟡 Payment link generation failed for partner ${evseConnector.partner_id}, using dummy paymentURL: ${e?.message}`,
                     { data: { partner_id: evseConnector.partner_id, authorization_reference: authorizationReference } }
                 );
-                // paymentLink stays '' — on_init still goes out; confirm returns CONFIRMED on PENDING payment
+                // Dummy URL so BAP frontend doesn't error on empty paymentURL during UAT testing
+                paymentLink = `https://pay.ubc.test/upi?ref=${authorizationReference}`;
             }
         }
 
