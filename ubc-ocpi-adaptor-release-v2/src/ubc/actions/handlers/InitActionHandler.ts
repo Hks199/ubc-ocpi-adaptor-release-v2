@@ -479,7 +479,7 @@ export default class InitActionHandler {
                     payload?.payload?.buyer_details as BuyerDetails
                 );
 
-                PaymentTxnDbService.update(paymentTxn.id, {
+                await PaymentTxnDbService.update(paymentTxn.id, {
                     payment_link: generatePaymentLinkResponse.payment_link,
                     authorization_reference: generatePaymentLinkResponse.authorization_reference,
                 });

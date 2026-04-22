@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import GLOBAL_VARS from '../../../../constants/global-vars';
 import type {
     RazorpayCreateOrderRequest,
     RazorpayCreateOrderResponse,
@@ -13,7 +14,7 @@ import type {
  * - RAZORPAY_SYNTHETIC_WITHOUT_CREDS=true
  * - UBC_PAYMENT_TEST_MODE=true (alias for the same behaviour)
  * - UBC_SKIP_RAZORPAY=true (short alias)
- * - Or deploy with BPP id starting with `uat-` (EV_CHARGING_UBC_BPP_ID), e.g. uat-bpp-*.org.in — so UAT works without extra env
+ * - Or subscriber id / BPP_URL hostname starts with `uat-` (env id, else GLOBAL_VARS id from BPP_URL hostname, else BPP_URL host)
  */
 export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     const explicit = process.env.RAZORPAY_SYNTHETIC_WITHOUT_CREDS?.trim().toLowerCase();
@@ -31,8 +32,20 @@ export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     if (explicit === 'false' || explicit === '0' || explicit === 'no') {
         return false;
     }
-    const bppId = (process.env.EV_CHARGING_UBC_BPP_ID || '').trim().toLowerCase();
-    if (bppId.startsWith('uat-')) {
+    const bppId = (
+        process.env.EV_CHARGING_UBC_BPP_ID ||
+        GLOBAL_VARS.EV_CHARGING_UBC_BPP_ID ||
+        ''
+    )
+        .trim()
+        .toLowerCase();
+    let bppHostFromUrl = '';
+    try {
+        bppHostFromUrl = new URL(GLOBAL_VARS.BPP_URL).hostname.trim().toLowerCase();
+    } catch {
+        bppHostFromUrl = '';
+    }
+    if (bppId.startsWith('uat-') || bppHostFromUrl.startsWith('uat-')) {
         return true;
     }
     const n = process.env.NODE_ENV;
