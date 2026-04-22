@@ -12,6 +12,8 @@ import type {
  * Enable on UAT / prod-like stacks without Razorpay keys:
  * - RAZORPAY_SYNTHETIC_WITHOUT_CREDS=true
  * - UBC_PAYMENT_TEST_MODE=true (alias for the same behaviour)
+ * - UBC_SKIP_RAZORPAY=true (short alias)
+ * - Or deploy with BPP id starting with `uat-` (EV_CHARGING_UBC_BPP_ID), e.g. uat-bpp-*.org.in — so UAT works without extra env
  */
 export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     const explicit = process.env.RAZORPAY_SYNTHETIC_WITHOUT_CREDS?.trim().toLowerCase();
@@ -22,8 +24,16 @@ export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     if (ubcPaymentTest === 'true' || ubcPaymentTest === '1' || ubcPaymentTest === 'yes') {
         return true;
     }
+    const ubcSkip = process.env.UBC_SKIP_RAZORPAY?.trim().toLowerCase();
+    if (ubcSkip === 'true' || ubcSkip === '1' || ubcSkip === 'yes') {
+        return true;
+    }
     if (explicit === 'false' || explicit === '0' || explicit === 'no') {
         return false;
+    }
+    const bppId = (process.env.EV_CHARGING_UBC_BPP_ID || '').trim().toLowerCase();
+    if (bppId.startsWith('uat-')) {
+        return true;
     }
     const n = process.env.NODE_ENV;
     return n === 'development' || n === 'test';
