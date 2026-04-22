@@ -29,6 +29,7 @@ import { OCPIPartnerAdditionalProps } from '../../../types/OCPIPartner';
 import { CdrDbService } from '../../../db-services/CdrDbService';
 import ChargingService from '../services/ChargingService';
 import { randomUUID } from 'crypto';
+import { GenericPaymentTxnStatus } from '../../../types/Payment';
 
 // Tracks running synthetic session intervals keyed by session DB id.
 // Allows manual stop to cancel the auto-complete timer and create a CDR immediately.
@@ -290,7 +291,22 @@ export default class UpdateActionHandler {
 
             const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
 
-            if (paymentStatus !== BecknPaymentStatus.PENDING && paymentStatus !== BecknPaymentStatus.COMPLETED) {
+            // Stop must work after UAT auto-refund / partial refund so OCPI STOP_SESSION can still run.
+            // Start charging remains restricted to PENDING or COMPLETED only.
+            const rawRefundedLike =
+                paymentTxn.status === GenericPaymentTxnStatus.Refunded ||
+                paymentTxn.status === GenericPaymentTxnStatus.PartiallyRefunded;
+            const allowStopAfterRefundOrPartial =
+                charging_action === ChargingAction.StopCharging &&
+                (paymentStatus === BecknPaymentStatus.REFUNDED ||
+                    paymentStatus === BecknPaymentStatus.PARTIALLY_REFUNDED ||
+                    rawRefundedLike);
+
+            if (
+                paymentStatus !== BecknPaymentStatus.PENDING &&
+                paymentStatus !== BecknPaymentStatus.COMPLETED &&
+                !allowStopAfterRefundOrPartial
+            ) {
                 throw new Error(`Payment txn status '${paymentStatus}' is not valid for charging. Expected PENDING or COMPLETED.`);
             }
         }
@@ -426,7 +442,7 @@ export default class UpdateActionHandler {
                     const kwhAtStop = running.getCurrentKwh();
                     logger.warn(`🟡 [synthetic] Cancelling simulation at kwh=${kwhAtStop} for ${beckn_order_id}`);
 
-                    // Fire CDR-based completion asynchronously (sends on_update + refund)
+                    // Fire CDR-based completion asynchronously (final on_update from CDR)
                     running.triggerCompletion(kwhAtStop).catch((e: any) => {
                         logger.error(`🔴 [synthetic] triggerCompletion on manual stop failed: ${e?.toString()}`, e);
                     });

@@ -11,6 +11,7 @@ import { UBCOnUpdateRequestPayload } from '../../schema/v2.0.0/actions/update/ty
 import { ExtractedOnUpdateRequestBody } from '../../schema/v2.0.0/actions/update/types/ExtractedOnUpdateRequestPayload';
 import { OrderStatus } from '../../schema/v2.0.0/enums/OrderStatus';
 import { ChargingSessionStatus } from '../../schema/v2.0.0/enums/ChargingSessionStatus';
+import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
 import UpdateActionHandler from './UpdateActionHandler';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
 import BecknLogDbService from '../../../db-services/BecknLogDbService';
@@ -131,6 +132,36 @@ export default class OnUpdateActionHandler {
         // Conditionally include order_value if present in backend request
         if (backendOnUpdateRequestPayload?.order_value) {
             ubcOnUpdatePayload.message.order['beckn:orderValue'] = backendOnUpdateRequestPayload.order_value;
+        }
+
+        // CDR / final settlement: match example on_update (order COMPLETED, session COMPLETED,
+        // payment amount aligned to settled orderValue, payment COMPLETED) for the BAP/app.
+        if (
+            backendOnUpdateRequestPayload?.order_value &&
+            sessionStatus === ChargingSessionStatus.COMPLETED
+        ) {
+            const settled = backendOnUpdateRequestPayload.order_value;
+            const existingPayment = ubcOnUpdatePayload.message.order['beckn:payment'] as Record<string, unknown>;
+
+            ubcOnUpdatePayload.message.order['beckn:payment'] = {
+                ...existingPayment,
+                'beckn:amount': {
+                    currency: settled.currency,
+                    value: settled.value,
+                },
+                'beckn:paymentStatus': BecknPaymentStatus.COMPLETED,
+            } as UBCOnUpdateRequestPayload['message']['order']['beckn:payment'];
+
+            const fulfillmentOut = ubcOnUpdatePayload.message.order['beckn:fulfillment'] as Record<string, unknown>;
+            const da = fulfillmentOut['beckn:deliveryAttributes'] as Record<string, unknown>;
+            fulfillmentOut['beckn:deliveryAttributes'] = {
+                ...da,
+                '@context':
+                    (da?.['@context'] as string) ||
+                    'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld',
+                '@type': 'ChargingSession',
+                sessionStatus: ChargingSessionStatus.COMPLETED,
+            } as never;
         }
 
         return ubcOnUpdatePayload;

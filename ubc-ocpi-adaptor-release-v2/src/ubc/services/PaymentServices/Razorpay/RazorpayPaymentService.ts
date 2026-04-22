@@ -57,6 +57,8 @@ export const mapGenericToBecknStatus = (status: string): BecknPaymentStatus | nu
             return BecknPaymentStatus.PENDING;
         case GenericPaymentTxnStatus.Refunded:
             return BecknPaymentStatus.REFUNDED;
+        case GenericPaymentTxnStatus.PartiallyRefunded:
+            return BecknPaymentStatus.PARTIALLY_REFUNDED;
         default:
             return null;
     }
