@@ -36,10 +36,18 @@ export default class ChargingService {
                 requested_energy_units = paymentTxn?.requested_energy_units?.toNumber() ?? 0;
             }
 
-            if (
-                requested_energy_units === 0 || 
-                requested_energy_units * 0.9 < (1000 * (session?.kwh?.toNumber() ?? 0))
-            ) {
+            const kwhNum = session?.kwh?.toNumber() ?? 0;
+            const consumedWh = 1000 * kwhNum;
+            const thresholdWh = requested_energy_units * 0.9;
+            const zeroRequested = requested_energy_units === 0;
+            const energyThresholdMet =
+                !zeroRequested && thresholdWh < consumedWh;
+
+            if (zeroRequested || energyThresholdMet) {
+                const trigger_reason: 'zero_requested' | 'energy_threshold' = zeroRequested
+                    ? 'zero_requested'
+                    : 'energy_threshold';
+
                 const req = {
                     body: {
                         partner_id: session?.partner_id,
@@ -47,18 +55,34 @@ export default class ChargingService {
                     },
                 } as Request;
 
-                logger.debug(
-                    `🟡 ${authorization_reference} Sending stop charging request in autoCutOffChargingSession`,
+                logger.info(
+                    `🟡 ${authorization_reference} autoCutOffChargingSession: sending STOP_SESSION`,
                     {
-                        data: { req },
+                        data: {
+                            trigger_source: 'autoCutOffChargingSession',
+                            trigger_reason,
+                            authorization_reference,
+                            session_db_id: session.id,
+                            cpo_session_id: session.cpo_session_id ?? '',
+                            partner_id: session.partner_id,
+                            requested_energy_units_wh: requested_energy_units,
+                            kwh: kwhNum,
+                            consumed_wh: consumedWh,
+                            threshold_wh: thresholdWh,
+                        },
                     }
                 );
 
                 const response = await AdminCommandsModule.stopCharging(req);
-                logger.debug(
-                    `🟢 ${authorization_reference} Sent stop charging request in autoCutOffChargingSession`,
+                logger.info(
+                    `🟢 ${authorization_reference} autoCutOffChargingSession: STOP_SESSION dispatched`,
                     {
-                        data: { req, response },
+                        data: {
+                            trigger_source: 'autoCutOffChargingSession',
+                            trigger_reason,
+                            cpo_session_id: session.cpo_session_id ?? '',
+                            httpStatus: response.httpStatus,
+                        },
                     }
                 );
             }
