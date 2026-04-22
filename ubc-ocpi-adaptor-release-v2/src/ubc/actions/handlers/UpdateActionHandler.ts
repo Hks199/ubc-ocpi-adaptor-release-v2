@@ -29,6 +29,7 @@ import { OCPIPartnerAdditionalProps } from '../../../types/OCPIPartner';
 import { CdrDbService } from '../../../db-services/CdrDbService';
 import ChargingService from '../services/ChargingService';
 import { randomUUID } from 'crypto';
+import { GenericPaymentTxnStatus } from '../../../types/Payment';
 
 // Tracks running synthetic session intervals keyed by session DB id.
 // Allows manual stop to cancel the auto-complete timer and create a CDR immediately.
@@ -290,14 +291,21 @@ export default class UpdateActionHandler {
 
             const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
 
-            const stopAfterRefund =
+            // Stop must work after UAT auto-refund / partial refund so OCPI STOP_SESSION can still run.
+            // Start charging remains restricted to PENDING or COMPLETED only.
+            const rawRefundedLike =
+                paymentTxn.status === GenericPaymentTxnStatus.Refunded ||
+                paymentTxn.status === GenericPaymentTxnStatus.PartiallyRefunded;
+            const allowStopAfterRefundOrPartial =
                 charging_action === ChargingAction.StopCharging &&
-                paymentStatus === BecknPaymentStatus.REFUNDED;
+                (paymentStatus === BecknPaymentStatus.REFUNDED ||
+                    paymentStatus === BecknPaymentStatus.PARTIALLY_REFUNDED ||
+                    rawRefundedLike);
 
             if (
                 paymentStatus !== BecknPaymentStatus.PENDING &&
                 paymentStatus !== BecknPaymentStatus.COMPLETED &&
-                !stopAfterRefund
+                !allowStopAfterRefundOrPartial
             ) {
                 throw new Error(`Payment txn status '${paymentStatus}' is not valid for charging. Expected PENDING or COMPLETED.`);
             }
