@@ -42,7 +42,8 @@ export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     let bppHostFromUrl = '';
     try {
         bppHostFromUrl = new URL(GLOBAL_VARS.BPP_URL).hostname.trim().toLowerCase();
-    } catch {
+    } 
+    catch {
         bppHostFromUrl = '';
     }
     if (bppId.startsWith('uat-') || bppHostFromUrl.startsWith('uat-')) {
