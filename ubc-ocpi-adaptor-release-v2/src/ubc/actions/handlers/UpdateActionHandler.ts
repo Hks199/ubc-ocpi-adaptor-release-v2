@@ -290,7 +290,15 @@ export default class UpdateActionHandler {
 
             const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
 
-            if (paymentStatus !== BecknPaymentStatus.PENDING && paymentStatus !== BecknPaymentStatus.COMPLETED) {
+            const stopAfterRefund =
+                charging_action === ChargingAction.StopCharging &&
+                paymentStatus === BecknPaymentStatus.REFUNDED;
+
+            if (
+                paymentStatus !== BecknPaymentStatus.PENDING &&
+                paymentStatus !== BecknPaymentStatus.COMPLETED &&
+                !stopAfterRefund
+            ) {
                 throw new Error(`Payment txn status '${paymentStatus}' is not valid for charging. Expected PENDING or COMPLETED.`);
             }
         }
@@ -426,7 +434,7 @@ export default class UpdateActionHandler {
                     const kwhAtStop = running.getCurrentKwh();
                     logger.warn(`🟡 [synthetic] Cancelling simulation at kwh=${kwhAtStop} for ${beckn_order_id}`);
 
-                    // Fire CDR-based completion asynchronously (sends on_update + refund)
+                    // Fire CDR-based completion asynchronously (final on_update from CDR)
                     running.triggerCompletion(kwhAtStop).catch((e: any) => {
                         logger.error(`🔴 [synthetic] triggerCompletion on manual stop failed: ${e?.toString()}`, e);
                     });

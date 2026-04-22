@@ -18,7 +18,11 @@ const GLOBAL_VARS = {
     // UBC — bpp_id should match MOCK_BPP subscriber_id and ONIX adapter.yaml networkParticipant
     SHOULD_SIGN_CALLBACK_REQUESTS: process.env.SHOULD_SIGN_CALLBACK_REQUESTS || 'false',
     EV_CHARGING_UBC_BPP_ID: process.env.EV_CHARGING_UBC_BPP_ID || bppHostnameFromUrl(BPP_URL),
-    EV_CHARGING_UBC_BPP_CLIENT_HOST: process.env.EV_CHARGING_UBC_BPP_CLIENT_HOST,
+    /** BPP HTTP client base (ONIX plugin). Falls back to ONIX plugin URL so URLs are never `undefined/bpp/caller`. */
+    EV_CHARGING_UBC_BPP_CLIENT_HOST:
+        process.env.EV_CHARGING_UBC_BPP_CLIENT_HOST ||
+        process.env.ONIX_BPP_PLUGIN_URL ||
+        'http://onix-bpp-plugin:8002',
     EV_CHARGING_UBC_UNIQUE_ID: process.env.EV_CHARGING_UBC_UNIQUE_ID || '76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH',
     INTERNAL_PAYMENT_LINK_HOST: process.env.INTERNAL_PAYMENT_LINK_HOST || 'http://localhost:6001',
     ENABLE_CATALOG_PUBLISH: process.env.ENABLE_CATALOG_PUBLISH || 'false',

@@ -18,7 +18,6 @@ import UpdateActionHandler from "./UpdateActionHandler";
 import { ChargingAction } from "../../schema/v2.0.0/enums/ChargingAction";
 import { Context } from "../../schema/v2.0.0/types/Context";
 import { SessionDbService } from "../../../db-services/SessionDbService";
-import ChargingService from "../services/ChargingService";
 import PaymentTxnDbService from "../../../db-services/PaymentTxnDbService";
 
 /**
@@ -170,7 +169,7 @@ export default class CancelActionHandler {
                 logger.debug(`Payment transaction not found for transaction ${transactionId}`);
                 throw new Error(`Payment transaction not found for transaction ${transactionId}`);
             }
-            await ChargingService.processRefundIfRequired(null, paymentTxn?.id, session, authorizationReference, 'CancelCharging');
+            // Cancel is communicated to the BAP via on_cancel only; no payment-gateway refund in this path.
         }
         
         const ubcOnCancelPayload = this.buildOnCancelRequestBody(context, onOrderObject, transactionId);
@@ -224,7 +223,7 @@ export default class CancelActionHandler {
          'beckn:txnRef': sourcePayment['beckn:txnRef'],
          'beckn:paidAt': sourcePayment['beckn:paidAt'],
          'beckn:beneficiary': 'BUYER',
-         'beckn:paymentStatus': BecknPaymentStatus.REFUNDED,
+         'beckn:paymentStatus': BecknPaymentStatus.CANCELLED,
      };
 
      // Include paymentAttributes with only upiTransactionId (no settlementAccounts)
@@ -334,7 +333,7 @@ export default class CancelActionHandler {
                 logger.debug(`Payment transaction not found for transaction ${becknTransactionId}`);
                 throw new Error(`Payment transaction not found for transaction ${becknTransactionId}`);
             }
-            await ChargingService.processRefundIfRequired(null, paymentTxn?.id, session, authorizationReference, 'CancelCharging');
+            // Auto-cancel: notify BAP via on_cancel only; no automatic refund.
 
             // Send on_cancel response to Beckn ONIX
             await this.sendOnCancelCallToBecknONIX(onCancelResponse);

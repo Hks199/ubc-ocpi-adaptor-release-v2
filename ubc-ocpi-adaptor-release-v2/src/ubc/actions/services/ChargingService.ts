@@ -177,11 +177,9 @@ export default class ChargingService {
                 );
             }
 
-            // Process refund if there's excess payment
-            // Refund amount = payment_txn.amount - session.total_cost
-            if (paymentTxn && session && storedCdr) {
-                await ChargingService.processRefundIfRequired(storedCdr, paymentTxn.id, session, authorization_reference, 'StopCharging');
-            }
+            // Settlement to the BAP is via on_update from CDR (final orderValue + COMPLETED session).
+            // Intentionally no automatic Razorpay/refund here — avoids REFUNDED payment blocking further
+            // update/stop flows and matches ubc-tsd stop-update example (payment stays COMPLETED for the request).
         } 
         catch (error: any) {
             logger.error(

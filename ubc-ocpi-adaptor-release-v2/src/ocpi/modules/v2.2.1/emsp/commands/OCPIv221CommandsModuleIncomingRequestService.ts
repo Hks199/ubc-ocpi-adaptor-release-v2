@@ -435,8 +435,8 @@ export default class OCPIv221CommandsModuleIncomingRequestService {
             },
         };
 
-        // Send on_update to Beckn ONIX
-        const bppHost = Utils.getBPPClientHost();
+        // Send on_update to Beckn ONIX (same base as other BPP→ONIX callers; not EV_CHARGING_UBC_BPP_CLIENT_HOST)
+        const bppHost = Utils.onix_bpp_caller_url();
         await BppOnixRequestService.sendPostRequest(
             {
                 url: `${bppHost}/${BecknAction.on_update}`,
