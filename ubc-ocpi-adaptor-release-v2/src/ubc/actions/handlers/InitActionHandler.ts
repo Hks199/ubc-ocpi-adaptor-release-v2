@@ -348,7 +348,25 @@ export default class InitActionHandler {
             chargingOptionType = UBCChargingMethod.Amount;
             chargingOptionUnit = unitQuantity.toString();
         }
-        
+
+        /** Wh cap for auto cut-off: never use INR quantity as Wh */
+        let requested_energy_units_wh: number | undefined;
+        if (chargingOptionType === UBCChargingMethod.Amount) {
+            const price = orderItem['beckn:price'] as Record<string, unknown> | undefined;
+            const applicable = price?.['applicableQuantity'] as
+                | { unitCode?: string; unitQuantity?: number }
+                | undefined;
+            if (
+                applicable?.unitCode === ChargingMetricsUnitCode.KWH &&
+                typeof applicable.unitQuantity === 'number'
+            ) {
+                requested_energy_units_wh = applicable.unitQuantity * 1000;
+            }
+        }
+        else {
+            requested_energy_units_wh = Number(chargingOptionUnit) || 0;
+        }
+
         const backendInitPayload: ExtractedInitRequestBody = {
             metadata: {
                 domain: BecknDomain.EVChargingUBC,
@@ -364,6 +382,7 @@ export default class InitActionHandler {
                 charge_point_connector_id: orderItem['beckn:orderedItem'],
                 charging_option_type: chargingOptionType,
                 charging_option_unit: chargingOptionUnit,
+                requested_energy_units_wh,
                 buyer_details: {
                     id: buyer['beckn:id'],
                     name: buyer['beckn:displayName'], // v0.9: renamed from beckn:name
@@ -447,6 +466,12 @@ export default class InitActionHandler {
         const gstBreakup = InitActionHandler.buildGSTBreakup(orderValueComponents);
         // network_fee defaults to 0.3, but we can set it here if needed in the future
         
+        const requestedWh =
+            payload.payload.requested_energy_units_wh ??
+            (payload.payload.charging_option_type === UBCChargingMethod.Units
+                ? Number(payload.payload.charging_option_unit) || 0
+                : 0);
+
         const paymentTxnData: Prisma.PaymentTxnUncheckedCreateInput = {
             authorization_reference: authorizationReference,
             amount: finalAmount,
@@ -457,7 +482,10 @@ export default class InitActionHandler {
                 gst_breakup: gstBreakup,
             } as PaymentBreakdown,
             status: paymentStatus,
-            requested_energy_units: payload.payload.charging_option_unit,
+            requested_energy_units: requestedWh,
+            additional_props: {
+                charging_option_type: payload.payload.charging_option_type,
+            },
             partner_id: evseConnector.partner_id,
             beckn_transaction_id: payload.metadata.beckn_transaction_id,
             beneficiary: beneficiary,

@@ -15,6 +15,8 @@ import { FinalAmount } from '../../types/FinalAmount';
 import { calculateFinalAmountFromCDR } from '../../utils/OrderValueCalculator';
 import OnStatusActionHandler from '../handlers/OnStatusActionHandler';
 import { GenericPaymentTxnStatus } from '../../../types/Payment';
+import { PaymentTxnAdditionalProps } from '../../../types/PaymentTxn';
+import { UBCChargingMethod } from '../../schema/v2.0.0/enums/UBCChargingMethod';
 
 export default class ChargingService {
     public static async autoCutOffChargingSession(session: Session): Promise<void> {
@@ -25,15 +27,45 @@ export default class ChargingService {
 
             const authorization_reference = session.authorization_reference ?? '';
 
+            const paymentTxn = await PaymentTxnDbService.getFirstByFilter({
+                where: {
+                    authorization_reference: session.authorization_reference ?? '',
+                },
+            });
+
             let requested_energy_units = session.requested_energy_units?.toNumber();
             if (requested_energy_units === undefined || requested_energy_units === null) {
-                const paymentTxn = await PaymentTxnDbService.getFirstByFilter({
-                    where: {
-                        authorization_reference: session.authorization_reference ?? '',
-                    },
-                });
-
                 requested_energy_units = paymentTxn?.requested_energy_units?.toNumber() ?? 0;
+            }
+
+            const paymentAdditional = (paymentTxn?.additional_props as PaymentTxnAdditionalProps) || {};
+            if (
+                paymentAdditional.charging_option_type === UBCChargingMethod.Amount &&
+                requested_energy_units === 0
+            ) {
+                return;
+            }
+
+            // Legacy rows: INR prepay amount was stored as requested_energy_units (Wh) before we persisted charging_option_type + kWh cap
+            const amountNum = paymentTxn?.amount?.toNumber() ?? 0;
+            if (
+                !paymentAdditional.charging_option_type &&
+                requested_energy_units > 0 &&
+                requested_energy_units < 500 &&
+                amountNum > 0 &&
+                Math.abs(requested_energy_units - amountNum) <= 2
+            ) {
+                logger.debug(
+                    `${authorization_reference} autoCutOffChargingSession: skip (legacy suspected INR stored as Wh)`,
+                    {
+                        data: {
+                            authorization_reference,
+                            requested_energy_units,
+                            payment_amount: amountNum,
+                        },
+                    }
+                );
+                return;
             }
 
             const kwhNum = session?.kwh?.toNumber() ?? 0;

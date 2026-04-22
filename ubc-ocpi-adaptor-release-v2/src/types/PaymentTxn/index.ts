@@ -5,6 +5,8 @@ import { RazorpayCreateOrderResponse, RazorpayCreateUPIPaymentResponse } from ".
  * Additional properties stored with a payment transaction
  */
 export type PaymentTxnAdditionalProps = {
+    /** From init: Units vs Amount (INR) — Amount + missing kWh cap skips energy auto cut-off */
+    charging_option_type?: string;
     /** When the payment was received */
     payment_received_at?: string;
     payment_sdk?: PaymentSDK;

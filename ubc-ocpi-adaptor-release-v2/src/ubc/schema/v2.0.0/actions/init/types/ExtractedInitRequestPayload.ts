@@ -7,6 +7,11 @@ export type ExtractedInitRequestPayload = {
     charge_point_connector_id: string,
     charging_option_type: UBCChargingMethod,
     charging_option_unit: string,
+    /**
+     * Prepaid energy cap in Wh for OCPI auto cut-off.
+     * For INR (amount) orders, derived from beckn:price.applicableQuantity when unit is KWH.
+     */
+    requested_energy_units_wh?: number,
     buyer_details?: BuyerDetails,
     amount: number,
     orderValueComponents: BecknOrderValueComponents[],
