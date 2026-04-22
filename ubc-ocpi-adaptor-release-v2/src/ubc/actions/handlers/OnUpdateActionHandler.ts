@@ -231,14 +231,13 @@ export default class OnUpdateActionHandler {
         const finalAmount: FinalAmount = calculateFinalAmountFromCDR(totalCost, serviceCharge);
 
         const partnerId = paymentTxn?.partner_id;
-        if (!partnerId) {
-            throw new Error('Partner ID not found in payment_txn');
+        let feePercentage = 0.2; // default for UAT / synthetic sessions without Razorpay creds
+        if (partnerId) {
+            const razorpayCredentials = await RazorpayPaymentGatewayService.getCredentials(partnerId);
+            if (razorpayCredentials?.credentials?.fee_percentage !== undefined) {
+                feePercentage = razorpayCredentials.credentials.fee_percentage;
+            }
         }
-        const razorpayCredentials = await RazorpayPaymentGatewayService.getCredentials(partnerId);
-        if (!razorpayCredentials) {
-            throw new Error('Razorpay credentials not found for partner');
-        }
-        const { fee_percentage: feePercentage = 0.2 } = razorpayCredentials.credentials;
 
         // Add this to DB
        

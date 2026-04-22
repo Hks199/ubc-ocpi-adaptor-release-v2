@@ -564,7 +564,40 @@ export default class RazorpayPaymentGatewayService {
                 return { success: false, error: 'Payment transaction not found' };
             }
             const partnerId = paymentTxn.partner_id;
-            const razorpayCredentials = await this.getCredentials(partnerId);            
+
+            // Synthetic mode: no real payment ID (UAT bypass) or synthetic pay_uat_ prefix
+            const isSyntheticPayment =
+                !paymentTxn.payment_gateway_payment_id ||
+                paymentTxn.payment_gateway_payment_id.startsWith('pay_uat_');
+            if (isSyntheticPayment || shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                const syntheticRefundId = `refund_uat_${crypto.randomBytes(8).toString('hex')}`;
+                logger.warn('Razorpay: synthetic refund (UAT/test mode — no real payment ID)', {
+                    paymentId,
+                    payment_gateway_payment_id: paymentTxn.payment_gateway_payment_id,
+                    refund_id: syntheticRefundId,
+                    amount: request.amount,
+                });
+                return {
+                    success: true,
+                    refund: {
+                        id: syntheticRefundId,
+                        entity: 'refund',
+                        amount: request.amount || 0,
+                        currency: 'INR',
+                        payment_id: paymentTxn.payment_gateway_payment_id || 'pay_uat_unknown',
+                        notes: request.notes || {},
+                        receipt: request.receipt || null,
+                        acquirer_data: null,
+                        created_at: Math.floor(Date.now() / 1000),
+                        batch_id: null,
+                        status: 'processed',
+                        speed_processed: 'normal',
+                        speed_requested: 'normal',
+                    },
+                };
+            }
+
+            const razorpayCredentials = await this.getCredentials(partnerId);
             if (!razorpayCredentials || !razorpayCredentials.credentials) {
                 logger.error('Razorpay: Failed to create refund - External Integration not found', undefined, {
                     paymentId,

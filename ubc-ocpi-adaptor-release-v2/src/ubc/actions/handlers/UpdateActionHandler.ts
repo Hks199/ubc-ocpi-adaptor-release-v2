@@ -24,6 +24,20 @@ import { OCPICommandResponseType } from '../../../ocpi/schema/modules/commands/e
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
 import { BecknPaymentStatus } from '../../schema/v2.0.0/enums/PaymentStatus';
 import { mapGenericToBecknStatus } from '../../services/PaymentServices/Razorpay/RazorpayPaymentService';
+import OCPIPartnerDbService from '../../../db-services/OCPIPartnerDbService';
+import { OCPIPartnerAdditionalProps } from '../../../types/OCPIPartner';
+import { CdrDbService } from '../../../db-services/CdrDbService';
+import ChargingService from '../services/ChargingService';
+import { randomUUID } from 'crypto';
+
+// Tracks running synthetic session intervals keyed by session DB id.
+// Allows manual stop to cancel the auto-complete timer and create a CDR immediately.
+const syntheticSessionIntervals = new Map<string, {
+    intervalHandle: ReturnType<typeof setInterval>;
+    safetyHandle: ReturnType<typeof setTimeout>;
+    triggerCompletion: (finalKwh: number) => Promise<void>;
+    getCurrentKwh: () => number;
+}>();
 
 /**
  * Handler for update action
@@ -335,9 +349,25 @@ export default class UpdateActionHandler {
             }
             const response = await AdminCommandsModule.startCharging(req);
             const ocpiCommandResponse = response.payload.data as OCPICommandResponseResponse;
-            
+            const isAccepted = ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED;
+
+            // In test_mode (UAT/sandbox) the CPO does not push OCPI session updates or CDR.
+            // Simulate the full lifecycle so the app receives on_update ACTIVE → on_update COMPLETED.
+            if (isAccepted && session) {
+                UpdateActionHandler.runTestModeSessionLifecycle(
+                    session.id,
+                    beckn_order_id,
+                    evse.partner_id ?? '',
+                    location,
+                    evse,
+                    evseConnector,
+                ).catch((e: any) => {
+                    logger.error(`🔴 Error in runTestModeSessionLifecycle: ${e?.toString()}`, e);
+                });
+            }
+
             return {
-                session_status: ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED ? ChargingSessionStatus.ACTIVE : ChargingSessionStatus.INTERRUPTED,
+                session_status: isAccepted ? ChargingSessionStatus.ACTIVE : ChargingSessionStatus.INTERRUPTED,
             };
         } 
         else if (charging_action === ChargingAction.StopCharging) {
@@ -381,6 +411,30 @@ export default class UpdateActionHandler {
             if (!session.cpo_session_id) {
                 throw new Error(`Cannot stop charging: CPO session ID not yet available for authorization_reference=${beckn_order_id}. The CPO may not have started the session yet.`);
             }
+
+            // Synthetic session — cancel the running interval and complete immediately
+            // with whatever kWh was consumed so far, then trigger CDR + refund.
+            if (session.cpo_session_id.startsWith('session_test_')) {
+                logger.warn(`🟡 [synthetic] Manual stop for synthetic session ${session.cpo_session_id}`);
+
+                const running = syntheticSessionIntervals.get(session.id);
+                if (running) {
+                    clearInterval(running.intervalHandle);
+                    clearTimeout(running.safetyHandle);
+                    syntheticSessionIntervals.delete(session.id);
+
+                    const kwhAtStop = running.getCurrentKwh();
+                    logger.warn(`🟡 [synthetic] Cancelling simulation at kwh=${kwhAtStop} for ${beckn_order_id}`);
+
+                    // Fire CDR-based completion asynchronously (sends on_update + refund)
+                    running.triggerCompletion(kwhAtStop).catch((e: any) => {
+                        logger.error(`🔴 [synthetic] triggerCompletion on manual stop failed: ${e?.toString()}`, e);
+                    });
+                }
+
+                return { session_status: ChargingSessionStatus.COMPLETED };
+            }
+
             const req = {
                 body: {
                     partner_id: session.partner_id,
@@ -389,7 +443,7 @@ export default class UpdateActionHandler {
             } as Request;
             const response = await AdminCommandsModule.stopCharging(req);
             const ocpiCommandResponse = response.payload.data as OCPICommandResponseResponse;
-            
+
             return {
                 session_status: ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED ? ChargingSessionStatus.COMPLETED : ChargingSessionStatus.ACTIVE,
             };
@@ -516,5 +570,162 @@ export default class UpdateActionHandler {
 
         // Send the error response to BPP ONIX, which will forward it to BAP
         await this.sendOnUpdateCallToBecknONIX(errorOnUpdatePayload);
+    }
+
+    /**
+     * Simulates the real CPO session lifecycle for UAT/sandbox where the CPO does
+     * not push OCPI callbacks.
+     *
+     * Real flow replicated:
+     *   1. Mark session ACTIVE immediately (CPO started charging).
+     *   2. Every 10 s push a kWh update (CPO PUT/PATCH /sessions).
+     *   3. When kWh consumed ≥ 90% of pre-paid units → auto-cutoff fires.
+     *      (Total simulation time: 2 minutes over 12 ticks)
+     *   4. Mark session COMPLETED, create synthetic CDR, trigger on_update COMPLETED.
+     */
+    private static async runTestModeSessionLifecycle(
+        sessionDbId: string,
+        becknOrderId: string,
+        partnerId: string,
+        location: { ocpi_location_id: string },
+        evse: { uid: string; partner_id: string | null },
+        connector: { connector_id: string },
+    ): Promise<void> {
+        const TICK_INTERVAL_MS = 10 * 1000; // 10 seconds between CPO session updates
+
+        const syntheticCpoSessionId = `session_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+        const startTime = new Date();
+
+        logger.warn(`🟡 [synthetic] Starting session lifecycle for ${becknOrderId}`, {
+            data: { sessionDbId, syntheticCpoSessionId, tickIntervalMs: TICK_INTERVAL_MS },
+        });
+
+        // Step 1: mark session ACTIVE immediately (CPO acknowledged start)
+        await SessionDbService.update(sessionDbId, {
+            status: ChargingSessionStatus.ACTIVE,
+            cpo_session_id: syntheticCpoSessionId,
+            start_date_time: startTime,
+        });
+
+        logger.warn(`🟢 [synthetic] Session ACTIVE for ${becknOrderId}`, { data: { syntheticCpoSessionId } });
+
+        // Resolve pre-paid energy (Wh) for the 90% auto-cutoff threshold
+        const sessionSnap = await SessionDbService.getById(sessionDbId);
+        let requestedEnergyUnitsWh = sessionSnap?.requested_energy_units?.toNumber() ?? 0;
+        if (!requestedEnergyUnitsWh) {
+            const paymentTxn = await PaymentTxnDbService.getFirstByFilter({
+                where: { authorization_reference: becknOrderId },
+            });
+            requestedEnergyUnitsWh = paymentTxn?.requested_energy_units?.toNumber() ?? 0;
+        }
+
+        logger.warn(`🟡 [synthetic] Energy threshold for ${becknOrderId}`, {
+            data: { requestedEnergyUnitsWh, threshold90Wh: requestedEnergyUnitsWh * 0.9 },
+        });
+
+        let tickCount  = 0;
+        let currentKwh = 0;
+        let completed  = false;
+
+        // ── shared completion handler — called on 90% auto-cutoff or manual stop ─
+        const triggerCompletion = async (finalKwh: number): Promise<void> => {
+            if (completed) return;
+            completed = true;
+            syntheticSessionIntervals.delete(sessionDbId);
+
+            const now          = new Date();
+            const totalTimeSec = Math.round((now.getTime() - startTime.getTime()) / 1000);
+
+            // Mark session COMPLETED
+            await SessionDbService.update(sessionDbId, {
+                status: ChargingSessionStatus.COMPLETED,
+                kwh:    finalKwh,
+                end_date_time: now,
+            });
+
+            // Create synthetic CDR (mirrors what real CPO would POST to /cdrs)
+            const syntheticCdrId = `cdr_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+            await CdrDbService.create({
+                data: {
+                    country_code:            'IN',
+                    party_id:                'UBC',
+                    ocpi_cdr_id:             syntheticCdrId,
+                    start_date_time:         startTime,
+                    end_date_time:           now,
+                    session_id:              syntheticCpoSessionId,
+                    authorization_reference: becknOrderId,
+                    cdr_token:               {},
+                    auth_method:             'AUTH_REQUEST',
+                    cdr_location: {
+                        id:           location.ocpi_location_id,
+                        evse_uid:     evse.uid,
+                        connector_id: connector.connector_id,
+                    },
+                    currency:         'INR',
+                    charging_periods: [],
+                    total_cost:       { excl_vat: 0, incl_vat: 0 },
+                    total_energy:     finalKwh,
+                    total_time:       BigInt(totalTimeSec),
+                    last_updated:     now,
+                    partner_id:       partnerId,
+                },
+            });
+
+            logger.warn(`🟢 [synthetic] CDR created for ${becknOrderId}`, {
+                data: { syntheticCdrId, finalKwh, totalTimeSec },
+            });
+
+            // Triggers on_update COMPLETED + refund → sent to app
+            await ChargingService.handleActionOnChargingCompleted(syntheticCpoSessionId);
+            logger.warn(`🟢 [synthetic] Lifecycle complete for ${becknOrderId}`);
+        };
+
+        // Step 2: tick every 10 s simulating CPO session updates.
+        // Auto-completes when consumed kWh ≥ 90% of pre-paid units.
+        // Also completes on manual STOP via triggerCompletion.
+        const interval = setInterval(async () => {
+            try {
+                tickCount++;
+                currentKwh = parseFloat((0.1 * tickCount).toFixed(3)); // 0.1 kWh per tick as a placeholder
+
+                // Stop ticking if session was externally marked non-ACTIVE
+                const latest = await SessionDbService.getById(sessionDbId);
+                if (!latest || latest.status !== ChargingSessionStatus.ACTIVE) {
+                    clearInterval(interval);
+                    logger.warn(`🟡 [synthetic] Session no longer ACTIVE — stopping kWh ticker for ${becknOrderId}`);
+                    return;
+                }
+
+                // Simulate CPO PUT/PATCH /sessions → update kWh in DB
+                await SessionDbService.update(sessionDbId, { kwh: currentKwh });
+
+                logger.warn(`🟡 [synthetic] kWh tick ${tickCount}: kwh=${currentKwh} for ${becknOrderId}`);
+
+                // Auto-cutoff: stop when consumed Wh ≥ 90% of pre-paid Wh
+                const consumedWh  = 1000 * currentKwh;
+                const threshold90 = requestedEnergyUnitsWh * 0.9;
+                if (requestedEnergyUnitsWh > 0 && consumedWh >= threshold90) {
+                    clearInterval(interval);
+                    logger.warn(`🟡 [synthetic] Auto-cutoff: consumed=${currentKwh}kWh >= 90% threshold=${(threshold90 / 1000).toFixed(3)}kWh for ${becknOrderId}`);
+                    await triggerCompletion(currentKwh);
+                }
+            }
+            catch (e: any) {
+                clearInterval(interval);
+                logger.error(`🔴 [synthetic] Tick error for ${becknOrderId}: ${e?.toString()}`, e);
+            }
+        }, TICK_INTERVAL_MS);
+
+        // No hard time limit — session completes when 90% energy consumed or manually stopped.
+        // Use a no-op timeout handle so the map entry shape stays consistent.
+        const safetyHandle = setTimeout(() => { /* no-op */ }, 0);
+
+        // Register so manual stop can cancel the ticker and trigger CDR-based completion
+        syntheticSessionIntervals.set(sessionDbId, {
+            intervalHandle: interval,
+            safetyHandle,
+            triggerCompletion,
+            getCurrentKwh: () => currentKwh,
+        });
     }
 }

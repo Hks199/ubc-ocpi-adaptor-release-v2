@@ -203,7 +203,7 @@ export default class TrackActionService {
                         "@type": "beckn:Fulfillment",
                         "beckn:id": "fulfillment-001",
                         "beckn:mode": "RESERVATION",
-                        // v0.9: trackingAction at top level
+                        // trackingAction at fulfillment level (per schema)
                         trackingAction: {
                             "@type": "beckn:TrackAction",
                             target: {
@@ -211,12 +211,13 @@ export default class TrackActionService {
                                 url: backendOnTrackResponsePayload.track_url || "",
                             },
                         },
-                        // v0.9: deliveryAttributes with sessionStatus and chargingTelemetry
+                        // sessionStatus at fulfillment level (per schema — NOT inside deliveryAttributes)
+                        sessionStatus: sessionStatus,
+                        // deliveryAttributes contains only chargingTelemetry (no sessionStatus)
                         "beckn:deliveryAttributes": {
                             "@context":
-                                "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld",
+                                "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingService/v1/context.jsonld",
                             "@type": "ChargingSession",
-                            sessionStatus: sessionStatus,
                             chargingTelemetry: [
                                 {
                                     eventTime:

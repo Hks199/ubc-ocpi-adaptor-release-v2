@@ -181,26 +181,13 @@ export default class PaymentGatewayService {
             const additionalProps = paymentTxn.additional_props as PaymentTxnAdditionalProps;
             const paymentSdk = additionalProps?.payment_sdk || PaymentSDK.Razorpay;
 
-            // Get transaction ID from details or additional props
-            const transactionId = paymentTxn?.payment_gateway_payment_id;
-
-            if (!transactionId) {
-                logger.error('Refund: Transaction ID not found', undefined, { payment_txn_id });
-                return {
-                    success: false,
-                    error: 'Transaction ID not found for refund',
-                };
-            }
-
             // Process refund with Razorpay
             if (paymentSdk === PaymentSDK.Razorpay) {
-                // For Razorpay, transactionId is the payment_id
-                const paymentId = transactionId;
-                // Convert refund amount to paise
+                // Pass the DB payment_txn_id so createRefund can look up partner/gateway IDs internally
                 const refundAmountInPaisa = Math.round(refund_amount * 100);
 
                 const refundResult = await RazorpayPaymentService.processRefund(
-                    paymentId,
+                    payment_txn_id,
                     refundAmountInPaisa,
                 );
 
