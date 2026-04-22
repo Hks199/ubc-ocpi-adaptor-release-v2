@@ -34,6 +34,10 @@ import PublishActionService from '../services/PublishActionService';
 import { UBCSelectRequestPayload } from '../../schema/v2.0.0/actions/select/types/SelectPayload';
 import OnStatusActionHandler from './OnStatusActionHandler';
 import { CreateUPIPaymentWithRazorpayResponse } from '../../../types/Razorpay';
+import {
+    isUatBypassPaymentUrlForAutoStatus,
+    shouldUseSyntheticRazorpayWhenNoCredentials,
+} from '../../services/PaymentServices/Razorpay/razorpaySynthetic.util';
 import { ChargingMetricsUnitCode } from '../../schema/v2.0.0/enums/ChargingMetricsUnitCode';
 import { SessionDbService } from '../../../db-services/SessionDbService';
 import { OCPISessionStatus } from '../../../ocpi/schema/modules/sessions/enums';
@@ -169,7 +173,7 @@ export default class InitActionHandler {
             const onInitPayment = ubcOnInitPayload.message?.order?.['beckn:payment'] as Record<string, unknown> | undefined;
             const onInitPaymentURL = onInitPayment?.['beckn:paymentURL'] as string | undefined;
             const onInitTxnRef = onInitPayment?.['beckn:txnRef'] as string | undefined;
-            if (onInitPaymentURL?.includes('pay.ubc.test') && onInitTxnRef) {
+            if (isUatBypassPaymentUrlForAutoStatus(onInitPaymentURL) && onInitTxnRef) {
                 const capturedTransactionId = reqPayload.context.transaction_id;
                 const capturedOnInitPayload = ubcOnInitPayload;
                 setImmediate(async () => {
@@ -211,7 +215,8 @@ export default class InitActionHandler {
                         }, BecknDomain.EVChargingUBC);
 
                         logger.debug(`🟢 [${reqId}] Auto-sent on_status COMPLETED for dummy URL UAT flow`, { data: { txnRef: onInitTxnRef } });
-                    } catch (e: any) {
+                    } 
+                    catch (e: any) {
                         logger.warn(`🟡 [${reqId}] Auto on_status COMPLETED failed: ${e?.message}`, { data: { txnRef: onInitTxnRef } });
                     }
                 });
@@ -541,13 +546,20 @@ export default class InitActionHandler {
             return await this.sendGeneratePaymentLinkCallToBackend(payload, paymentTxn.partner_id);
         }
         else {
-            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as  CreateUPIPaymentWithRazorpayResponse;
+            const paymentGatewayOrder = await PaymentGatewayService.createPaymentGatewayOrder(paymentTxn, ocpiPartner, buyerDetails) as CreateUPIPaymentWithRazorpayResponse;
+
+            let payment_link = paymentGatewayOrder.payment?.link || '';
+            if (!payment_link && shouldUseSyntheticRazorpayWhenNoCredentials()) {
+                payment_link = `https://pay.ubc.test/upi?ref=${encodeURIComponent(paymentTxn.authorization_reference || paymentTxn.id)}`;
+                logger.warn('Payment gateway returned no UPI link — using UAT dummy paymentURL (test mode)', {
+                    data: { partner_id: paymentTxn.partner_id, payment_txn_id: paymentTxn.id },
+                });
+            }
 
             return {
-                payment_link: paymentGatewayOrder.payment?.link || '',
+                payment_link,
                 authorization_reference: paymentTxn.authorization_reference,
             };
-        
         }
     }
 

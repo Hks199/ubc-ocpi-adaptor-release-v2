@@ -17,6 +17,7 @@ import {
 } from "../../../../types/Razorpay";
 import { PaymentTxnAdditionalProps } from "../../../../types/PaymentTxn";
 import { BuyerDetails } from "../../../schema/v2.0.0/types/BuyerDetails";
+import { BecknPaymentStatus } from "../../../schema/v2.0.0/enums/PaymentStatus";
 
 // Types for payment gateway
 interface CreatePaymentGatewayOrderResponseType {
@@ -77,8 +78,14 @@ export default class PaymentGatewayService {
             error: '',
         };
 
-        // Validate payment transaction status
-        if (status !== GenericPaymentTxnStatus.Pending && status !== 'PENDING') {
+        // Validate payment transaction status (DB may use Beckn INITIATED until gateway order exists)
+        const allowedPreOrderStatuses = [
+            GenericPaymentTxnStatus.Pending,
+            'PENDING',
+            BecknPaymentStatus.INITIATED,
+            'INITIATED',
+        ];
+        if (!allowedPreOrderStatuses.includes(status as string)) {
             logger.error('Invalid payment txn status', undefined, { paymentTxn });
             response.error = 'Invalid payment txn status';
             return response;

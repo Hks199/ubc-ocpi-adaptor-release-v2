@@ -8,10 +8,18 @@ import type {
 /**
  * When true, Razorpay order/UPI creation uses synthetic responses if DB + env have no keys.
  * When unset, development/test default to synthetic; production requires explicit opt-in.
+ *
+ * Enable on UAT / prod-like stacks without Razorpay keys:
+ * - RAZORPAY_SYNTHETIC_WITHOUT_CREDS=true
+ * - UBC_PAYMENT_TEST_MODE=true (alias for the same behaviour)
  */
 export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     const explicit = process.env.RAZORPAY_SYNTHETIC_WITHOUT_CREDS?.trim().toLowerCase();
     if (explicit === 'true' || explicit === '1' || explicit === 'yes') {
+        return true;
+    }
+    const ubcPaymentTest = process.env.UBC_PAYMENT_TEST_MODE?.trim().toLowerCase();
+    if (ubcPaymentTest === 'true' || ubcPaymentTest === '1' || ubcPaymentTest === 'yes') {
         return true;
     }
     if (explicit === 'false' || explicit === '0' || explicit === 'no') {
@@ -19,6 +27,17 @@ export function shouldUseSyntheticRazorpayWhenNoCredentials(): boolean {
     }
     const n = process.env.NODE_ENV;
     return n === 'development' || n === 'test';
+}
+
+/** Payment URLs that imply no real PSP — safe to auto-complete on_status in UAT flows. */
+export function isUatBypassPaymentUrlForAutoStatus(paymentUrl: string | undefined): boolean {
+    if (!paymentUrl) {
+        return false;
+    }
+    if (paymentUrl.includes('pay.ubc.test')) {
+        return true;
+    }
+    return paymentUrl.startsWith('upi://') && paymentUrl.includes('pa=success@razorpay');
 }
 
 export function buildSyntheticOrderResponse(order: RazorpayCreateOrderRequest): RazorpayCreateOrderResponse {

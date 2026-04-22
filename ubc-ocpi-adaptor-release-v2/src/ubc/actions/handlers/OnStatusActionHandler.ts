@@ -311,7 +311,8 @@ export default class OnStatusActionHandler {
                     status: genericStatus,
                 });
                 logger.debug(`🟡 [${authorization_reference}] Updated payment status to`, { paymentTxnId: paymentTxn.id, genericStatus });
-            } else {
+            } 
+            else {
                 logger.debug(`🟡 [${authorization_reference}] Payment status already at target, skipping DB update`, { paymentTxnId: paymentTxn.id, genericStatus });
             }
 
