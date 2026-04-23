@@ -1,4 +1,4 @@
-import { PaymentTxn, Prisma } from '@prisma/client';
+import { PaymentTxn, Prisma, Tariff } from '@prisma/client';
 import { Request } from 'express';
 import { BecknDomain } from '../../schema/v2.0.0/enums/BecknDomain';
 import { BecknActionResponse } from '../../schema/v2.0.0/types/AckResponse';
@@ -46,6 +46,9 @@ import { BuyerFinderFeeEnum } from '../../schema/v2.0.0/enums/BuyerFinderFeeEnum
 import { BecknOrderValueComponents, GSTBreakup, PaymentBreakdown } from '../../schema/v2.0.0/types/OrderValue';
 import { OrderValueComponentsType } from '../../schema/v2.0.0/enums/OrderValueComponentsType';
 import { BuyerDetails } from '../../schema/v2.0.0/types/BuyerDetails';
+import { TariffDbService } from '../../../db-services/TariffDbService';
+import { OCPIv211PriceComponent, OCPIv211TariffElement } from '../../../ocpi/schema/modules/tariffs/types';
+import { OCPITariffDimensionType } from '../../../ocpi/schema/modules/tariffs/enums';
 
 export default class InitActionHandler {
     public static async handleBppInitAction(
@@ -327,6 +330,37 @@ export default class InitActionHandler {
         return null;
     }
 
+    /**
+     * For Amount (INR) prepay, total energy must not rely on catalog `beckn:price.applicableQuantity`
+     * (often 1 KWH for per-kWh pricing). Uses quoted charging base from order components and OCPI ENERGY price.
+     */
+    private static derivePrepaidWhFromAmountOrder(
+        orderValueComponents: BecknOrderValueComponents[],
+        tariff: Tariff | null,
+    ): number {
+        if (!tariff?.ocpi_tariff_element) {
+            return 0;
+        }
+        const unitLine = orderValueComponents.find((c) => c.type === OrderValueComponentsType.UNIT);
+        if (!unitLine || unitLine.value <= 0) {
+            return 0;
+        }
+        const elements = tariff.ocpi_tariff_element as unknown as OCPIv211TariffElement[];
+        const firstEl = elements?.[0];
+        const pcs = (firstEl?.price_components || []) as OCPIv211PriceComponent[];
+        const energyPricePerKwh = pcs
+            .filter((p) => p.type === OCPITariffDimensionType.ENERGY)
+            .reduce((acc, p) => acc + (Number(p.price) || 0), 0);
+        if (!(energyPricePerKwh > 0)) {
+            return 0;
+        }
+        const kwh = unitLine.value / energyPricePerKwh;
+        if (!Number.isFinite(kwh) || kwh <= 0) {
+            return 0;
+        }
+        return Math.round(kwh * 1000);
+    }
+
     public static translateUBCToBackendPayload(
         payload: UBCInitRequestPayload
     ): ExtractedInitRequestBody {
@@ -349,7 +383,7 @@ export default class InitActionHandler {
             chargingOptionUnit = unitQuantity.toString();
         }
 
-        /** Wh cap for auto cut-off: never use INR quantity as Wh */
+        /** Amount: `applicableQuantity` is often 1 KWH in offers; Wh cap is recomputed in createPaymentTxnDetails. */
         let requested_energy_units_wh: number | undefined;
         if (chargingOptionType === UBCChargingMethod.Amount) {
             const price = orderItem['beckn:price'] as Record<string, unknown> | undefined;
@@ -465,12 +499,27 @@ export default class InitActionHandler {
 
         const gstBreakup = InitActionHandler.buildGSTBreakup(orderValueComponents);
         // network_fee defaults to 0.3, but we can set it here if needed in the future
-        
-        const requestedWh =
+
+        let requestedWh =
             payload.payload.requested_energy_units_wh ??
             (payload.payload.charging_option_type === UBCChargingMethod.Units
                 ? Number(payload.payload.charging_option_unit) || 0
                 : 0);
+
+        if (payload.payload.charging_option_type === UBCChargingMethod.Amount) {
+            const tariffId = evseConnector.tariff_ids?.[0];
+            const ocpiTariff = tariffId ? await TariffDbService.getByOcpiTariffId(tariffId) : null;
+            const derivedWh = InitActionHandler.derivePrepaidWhFromAmountOrder(orderValueComponents, ocpiTariff);
+            if (derivedWh > 0) {
+                if (requestedWh > 0 && requestedWh !== derivedWh) {
+                    logger.info(
+                        `Init payment: Amount order prepaid Wh from tariff+orderValue (${derivedWh}) overrides applicableQuantity hint (${requestedWh})`,
+                        { data: { transaction_id: payload.metadata.beckn_transaction_id, derivedWh, previousWh: requestedWh } },
+                    );
+                }
+                requestedWh = derivedWh;
+            }
+        }
 
         const paymentTxnData: Prisma.PaymentTxnUncheckedCreateInput = {
             authorization_reference: authorizationReference,
