@@ -1,7 +1,12 @@
 import { Request } from 'express';
 import { HttpResponse } from '../../../types/responses';
 import { logger } from '../../../services/logger.service';
-import { UBCRatingRequestPayload } from '../../schema/v2.0.0/actions/rating/types/RatingPayload';
+import {
+    RatingFeedback,
+    UBCRatingRequestMessage,
+    UBCRatingRequestPayload,
+} from '../../schema/v2.0.0/actions/rating/types/RatingPayload';
+import { RatingCategory } from '../../schema/v2.0.0/types/RatingCategory';
 import { BecknActionResponse } from '../../schema/v2.0.0/types/AckResponse';
 import { BecknAction } from '../../schema/v2.0.0/enums/BecknAction';
 import OnixBppController from '../../controller/OnixBppController';
@@ -26,6 +31,231 @@ import RatingRecordDbService from '../../../db-services/RatingRecordDbService';
  * Handler for rating action
  */
 export default class RatingActionHandler {
+    private static readonly DEFAULT_BEST = 5;
+    private static readonly DEFAULT_WORST = 1;
+    private static readonly DEFAULT_RATING_WHEN_MISSING = 3;
+    private static readonly DEFAULT_CATEGORY = RatingCategory.Order;
+
+    /**
+     * Expands Beckn `message.ratings[]` into one payload per rating (distinct `message_id` suffix),
+     * or a single legacy flat `message`. Each result is safe for Prisma / CPO / mock.
+     */
+    private static expandRatingJobs(payload: UBCRatingRequestPayload): UBCRatingRequestPayload[] {
+        const rawMsg = payload?.message as unknown;
+        if (rawMsg === null || rawMsg === undefined || typeof rawMsg !== 'object') {
+            logger.warn('🟡 Rating: message missing or invalid; using defaults', {
+                data: { transaction_id: payload?.context?.transaction_id },
+            });
+            return [
+                {
+                    ...payload,
+                    message: RatingActionHandler.buildDefaultRatingMessage(),
+                },
+            ];
+        }
+
+        const msg = rawMsg as Record<string, unknown>;
+        const ratings = msg['ratings'] ?? msg['beckn:ratings'];
+        if (Array.isArray(ratings) && ratings.length > 0) {
+            return ratings.map((entry, i) => {
+                const row =
+                    entry && typeof entry === 'object' && !Array.isArray(entry)
+                        ? { ...(entry as Record<string, unknown>) }
+                        : {};
+                const merged = RatingActionHandler.mergeRatingMessageLayers(row);
+                const message = RatingActionHandler.normalizeCoercedMessageFromLayer(merged, payload.context.transaction_id, true);
+                const baseMsgId = payload.context.message_id;
+                return {
+                    ...payload,
+                    context: {
+                        ...payload.context,
+                        message_id: i === 0 ? baseMsgId : `${baseMsgId}#${i}`,
+                    },
+                    message,
+                };
+            });
+        }
+
+        const merged = RatingActionHandler.mergeRatingMessageLayers(msg);
+        const message = RatingActionHandler.normalizeCoercedMessageFromLayer(
+            merged,
+            payload.context.transaction_id,
+            false,
+        );
+        return [{ ...payload, message }];
+    }
+
+    /**
+     * Maps one merged rating row (flat legacy or one `RatingInput` object) to a normalized message.
+     */
+    private static normalizeCoercedMessageFromLayer(
+        merged: Record<string, unknown>,
+        transactionId: string | undefined,
+        fromRatingsArray: boolean,
+    ): UBCRatingRequestMessage {
+        const valueRaw = RatingActionHandler.pickFirstFiniteNumber(merged, [
+            'value',
+            'ratingValue',
+            'beckn:ratingValue',
+            'score',
+            'stars',
+            'overallRating',
+        ]);
+        const bestRaw = RatingActionHandler.pickFirstFiniteNumber(merged, [
+            'best',
+            'bestRating',
+            'beckn:bestRating',
+            'maxRating',
+        ]);
+        const worstRaw = RatingActionHandler.pickFirstFiniteNumber(merged, [
+            'worst',
+            'worstRating',
+            'beckn:worstRating',
+            'minRating',
+        ]);
+        const best = bestRaw ?? RatingActionHandler.DEFAULT_BEST;
+        const worst = worstRaw ?? RatingActionHandler.DEFAULT_WORST;
+        let value = valueRaw ?? RatingActionHandler.DEFAULT_RATING_WHEN_MISSING;
+        if (value < worst) {
+            value = worst;
+        }
+        if (value > best) {
+            value = best;
+        }
+
+        const categoryStr = RatingActionHandler.pickFirstString(merged, [
+            'category',
+            'beckn:ratingCategory',
+            'ratingCategory',
+            'type',
+        ]);
+        const category = RatingActionHandler.coerceRatingCategory(categoryStr);
+
+        const id =
+            RatingActionHandler.pickFirstString(merged, [
+                'id',
+                'beckn:id',
+                'entityId',
+                'refId',
+                'orderId',
+            ]) ?? '';
+
+        const feedback = RatingActionHandler.normalizeRatingFeedback(merged['feedback'] ?? merged['beckn:feedback']);
+
+        const hadValue = valueRaw !== undefined && valueRaw !== null;
+        if (!hadValue || !categoryStr) {
+            logger.warn('🟡 Rating: coerced missing fields from BAP payload', {
+                data: {
+                    transaction_id: transactionId,
+                    fromRatingsArray,
+                    hadNumericValue: hadValue,
+                    hadCategory: !!categoryStr,
+                    usedDefaults: { value, category, best, worst },
+                },
+            });
+        }
+
+        return {
+            id,
+            value,
+            best,
+            worst,
+            category,
+            ...(feedback ? { feedback } : {}),
+        };
+    }
+
+    private static buildDefaultRatingMessage(): UBCRatingRequestMessage {
+        return {
+            id: '',
+            value: RatingActionHandler.DEFAULT_RATING_WHEN_MISSING,
+            best: RatingActionHandler.DEFAULT_BEST,
+            worst: RatingActionHandler.DEFAULT_WORST,
+            category: RatingActionHandler.DEFAULT_CATEGORY,
+        };
+    }
+
+    private static mergeRatingMessageLayers(msg: Record<string, unknown>): Record<string, unknown> {
+        const out: Record<string, unknown> = { ...msg };
+        const nested = msg['rating'] ?? msg['beckn:Rating'];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+            for (const [k, v] of Object.entries(nested as Record<string, unknown>)) {
+                if (out[k] === undefined || out[k] === null || out[k] === '') {
+                    out[k] = v;
+                }
+            }
+        }
+        return out;
+    }
+
+    private static pickFirstFiniteNumber(obj: Record<string, unknown>, keys: string[]): number | undefined {
+        for (const key of keys) {
+            const v = obj[key];
+            if (typeof v === 'number' && Number.isFinite(v)) {
+                return v;
+            }
+            if (typeof v === 'string' && v.trim() !== '') {
+                const n = Number(v);
+                if (Number.isFinite(n)) {
+                    return n;
+                }
+            }
+        }
+        return undefined;
+    }
+
+    private static pickFirstString(obj: Record<string, unknown>, keys: string[]): string | undefined {
+        for (const key of keys) {
+            const v = obj[key];
+            if (typeof v === 'string' && v.trim() !== '') {
+                return v.trim();
+            }
+        }
+        return undefined;
+    }
+
+    private static coerceRatingCategory(raw: string | undefined): RatingCategory {
+        if (!raw) {
+            return RatingActionHandler.DEFAULT_CATEGORY;
+        }
+        const trimmed = raw.trim();
+        const upper = trimmed.toUpperCase();
+        const upperMap: Record<string, RatingCategory> = {
+            ITEM: RatingCategory.Item,
+            ORDER: RatingCategory.Order,
+            FULFILLMENT: RatingCategory.Fulfillment,
+            PROVIDER: RatingCategory.Provider,
+            AGENT: RatingCategory.Agent,
+            SUPPORT: RatingCategory.Support,
+        };
+        if (upperMap[upper]) {
+            return upperMap[upper];
+        }
+        const allowed = Object.values(RatingCategory) as string[];
+        if (allowed.includes(trimmed)) {
+            return trimmed as RatingCategory;
+        }
+        return RatingActionHandler.DEFAULT_CATEGORY;
+    }
+
+    private static normalizeRatingFeedback(raw: unknown): RatingFeedback | undefined {
+        if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) {
+            return undefined;
+        }
+        const o = raw as Record<string, unknown>;
+        const commentsRaw = o.comments ?? o['beckn:comments'] ?? o['beckn:description'];
+        const tagsRaw = o.tags ?? o['beckn:tags'];
+        const comments = typeof commentsRaw === 'string' ? commentsRaw : undefined;
+        let tags: string[] | undefined;
+        if (Array.isArray(tagsRaw)) {
+            tags = tagsRaw.filter((t): t is string => typeof t === 'string');
+        }
+        if (!comments && (!tags || tags.length === 0)) {
+            return undefined;
+        }
+        return { ...(comments ? { comments } : {}), ...(tags && tags.length > 0 ? { tags } : {}) };
+    }
+
     public static async handleBppRatingAction(
         req: Request
     ): Promise<HttpResponse<BecknActionResponse>> {
@@ -50,45 +280,54 @@ export default class RatingActionHandler {
         const reqId = reqPayload.context?.message_id || 'unknown';
         const logData = { action: 'rating', messageId: reqId };
         let ratingRecordId: string | null = null;
+        let lastOnRatingPayload: UBCOnRatingRequestPayload | undefined;
+
+        const jobs = RatingActionHandler.expandRatingJobs(reqPayload);
+        logger.debug(`🟡 [${reqId}] Rating jobs expanded count=${jobs.length}`, {
+            data: { transaction_id: reqPayload.context?.transaction_id },
+        });
 
         try {
-            // translate BAP schema to CPO's BE server
-            logger.debug(
-                `🟡 [${reqId}] Translating UBC to Backend payload in handleEVChargingUBCBppRatingAction`,
-                { data: { logData, reqPayload } }
-            );
-            const backendRatingPayload: ExtractedRatingRequestBody =
-                RatingActionHandler.translateUBCToBackendPayload(reqPayload);
-            const ratingRecord = await RatingActionHandler.createRatingRecord(reqPayload, backendRatingPayload);
-            ratingRecordId = ratingRecord.id;
+            for (let i = 0; i < jobs.length; i++) {
+                const normalizedPayload = jobs[i];
+                const jobReqId = normalizedPayload.context?.message_id || reqId;
+                ratingRecordId = null;
 
-            // make a request to CPO BE server
-            logger.debug(
-                `🟡 [${reqId}] Sending rating call to backend in handleEVChargingUBCBppRatingAction`,
-                { data: { backendRatingPayload } }
-            );
-            const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload =
-                await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload, ratingRecordId);
-            logger.debug(
-                `🟢 [${reqId}] Received rating response from backend in handleEVChargingUBCBppRatingAction`,
-                { data: { backendOnRatingResponsePayload } }
-            );
+                logger.debug(
+                    `🟡 [${jobReqId}] Translating UBC to Backend payload (rating job ${i + 1}/${jobs.length})`,
+                    { data: { logData, reqPayload: normalizedPayload } },
+                );
+                const backendRatingPayload: ExtractedRatingRequestBody =
+                    RatingActionHandler.translateUBCToBackendPayload(normalizedPayload);
+                const ratingRecord = await RatingActionHandler.createRatingRecord(
+                    normalizedPayload,
+                    backendRatingPayload,
+                );
+                ratingRecordId = ratingRecord.id;
 
-            // translate CPO's BE Server response to UBC Schema
-            logger.debug(
-                `🟡 [${reqId}] Translating Backend to UBC payload in handleEVChargingUBCBppRatingAction`,
-                { data: { reqPayload, backendOnRatingResponsePayload } }
-            );
-            const ubcOnRatingPayload: UBCOnRatingRequestPayload =
-                RatingActionHandler.translateBackendToUBC(reqPayload, backendOnRatingResponsePayload);
+                logger.debug(
+                    `🟡 [${jobReqId}] Sending rating call to backend (rating job ${i + 1}/${jobs.length})`,
+                    { data: { backendRatingPayload } },
+                );
+                const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload =
+                    await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload, ratingRecordId);
+                logger.debug(
+                    `🟢 [${jobReqId}] Received rating response from backend`,
+                    { data: { backendOnRatingResponsePayload } },
+                );
 
-            // Call BAP on_rating
-            logger.debug(
-                `🟡 [${reqId}] Sending on_rating call to Beckn ONIX in handleEVChargingUBCBppRatingAction`,
-                { data: { ubcOnRatingPayload } }
-            );
-            const response = await RatingActionHandler.sendOnRatingCallToBecknONIX(ubcOnRatingPayload);
-            if (ratingRecordId) {
+                logger.debug(
+                    `🟡 [${jobReqId}] Translating Backend to UBC payload`,
+                    { data: { backendOnRatingResponsePayload } },
+                );
+                const ubcOnRatingPayload: UBCOnRatingRequestPayload =
+                    RatingActionHandler.translateBackendToUBC(normalizedPayload, backendOnRatingResponsePayload);
+
+                logger.debug(
+                    `🟡 [${jobReqId}] Sending on_rating call to Beckn ONIX`,
+                    { data: { ubcOnRatingPayload } },
+                );
+                const response = await RatingActionHandler.sendOnRatingCallToBecknONIX(ubcOnRatingPayload);
                 await RatingRecordDbService.update(ratingRecordId, {
                     on_rating_payload: ubcOnRatingPayload as any,
                     status: 'ON_RATING_SENT',
@@ -96,13 +335,16 @@ export default class RatingActionHandler {
                         on_rating_ack: response,
                     } as any,
                 });
-            }
-            logger.debug(
-                `🟢 [${reqId}] Sent on_rating call to Beckn ONIX in handleEVChargingUBCBppRatingAction`,
-                { data: { response } }
-            );
+                logger.debug(`🟢 [${jobReqId}] Sent on_rating (job ${i + 1}/${jobs.length})`, { data: { response } });
 
-            return ubcOnRatingPayload;
+                lastOnRatingPayload = ubcOnRatingPayload;
+                ratingRecordId = null;
+            }
+
+            if (!lastOnRatingPayload) {
+                throw new Error('Rating: no jobs processed');
+            }
+            return lastOnRatingPayload;
         }
         catch (e: any) {
             if (ratingRecordId) {
@@ -126,8 +368,12 @@ export default class RatingActionHandler {
     public static translateUBCToBackendPayload(
         payload: UBCRatingRequestPayload
     ): ExtractedRatingRequestBody {
-        const { id, value, category, feedback } = payload.message;
-        
+        const m = payload.message;
+        const id = m.id ?? '';
+        const value = Number(m.value);
+        const category = (m.category ?? RatingActionHandler.DEFAULT_CATEGORY) as RatingCategory;
+        const feedback = m.feedback;
+
         const backendRatingPayload: ExtractedRatingRequestBody = {
             metadata: {
                 domain: BecknDomain.EVChargingUBC,
@@ -139,7 +385,7 @@ export default class RatingActionHandler {
             },
             payload: {
                 auth_reference: id, // charge_transaction_id is the authorization_reference
-                rating: value,
+                rating: Number.isFinite(value) ? value : RatingActionHandler.DEFAULT_RATING_WHEN_MISSING,
                 rating_category: category,
                 comments: feedback?.comments || '',
                 tags: feedback?.tags || [],
@@ -161,8 +407,8 @@ export default class RatingActionHandler {
                 bpp_uri: payload.context.bpp_uri,
                 bap_id: payload.context.bap_id,
                 bap_uri: payload.context.bap_uri,
-                rating_value: payload.message.value,
-                rating_category: payload.message.category,
+                rating_value: Number(payload.message.value),
+                rating_category: String(payload.message.category ?? RatingActionHandler.DEFAULT_CATEGORY),
                 best_rating: payload.message.best,
                 worst_rating: payload.message.worst,
                 auth_reference: backendPayload.payload.auth_reference,
