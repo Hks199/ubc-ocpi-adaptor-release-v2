@@ -148,6 +148,11 @@ export default class OnStatusActionHandler {
         const initOrder = existingOnInitResponse.message.order;
         const initPayment = initOrder['beckn:payment'];
 
+        const selectOrderValue = selectOrder['beckn:orderValue'];
+        if (!selectOrderValue) {
+            throw new Error('Stored on_select is missing beckn:orderValue; cannot formulate on_status');
+        }
+
         // Generate new context for async on_status
         const context = Utils.getBPPContext({
             domain: BecknDomain.EVChargingUBC,
@@ -247,7 +252,7 @@ export default class OnStatusActionHandler {
                     "beckn:seller": selectOrder['beckn:seller'], // from on_select
                     "beckn:buyer": fullBuyer as any, // Full buyer details per example schema
                     "beckn:orderItems": orderItems as any, // Full orderItems (orderedItem, quantity, price) per example schema
-                    "beckn:orderValue": selectOrder['beckn:orderValue'], // from on_select
+                    "beckn:orderValue": selectOrderValue, // from on_select
                     // Note: fulfillment is NOT included in on_status per example schema (06_on_status_1)
                     "beckn:payment": paymentObject as BecknPayment, // from on_init with updated paymentStatus
                 },

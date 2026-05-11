@@ -131,7 +131,7 @@ export default class SelectActionHandler {
 
             // return the response
             return ubcOnSelectPayload;
-        } 
+        }
         catch (e: any) {
             logger.error(
                 `🔴 [${reqId}] Error in UBCBppActionService.handleEVChargingUBCBppSelectAction: ${e?.toString()}`,
@@ -140,8 +140,69 @@ export default class SelectActionHandler {
                     data: { logData },
                 }
             );
+            try {
+                const rejectedPayload = SelectActionHandler.buildRejectedOnSelectPayload(reqPayload, e);
+                logger.debug(
+                    `🟡 [${reqId}] Sending on_select (REJECTED) to Beckn ONIX after select failure`,
+                    { data: { rejectedPayload } },
+                );
+                await SelectActionHandler.sendOnSelectCallToBecknONIX(rejectedPayload);
+                logger.debug(`🟢 [${reqId}] Sent on_select (REJECTED) to Beckn ONIX`, { data: {} });
+            } catch (sendErr: unknown) {
+                logger.error(
+                    `🔴 [${reqId}] Failed to send on_select REJECTED to Beckn ONIX`,
+                    sendErr instanceof Error ? sendErr : new Error(String(sendErr)),
+                    { data: { logData } },
+                );
+            }
             throw e;
         }
+    }
+
+    /**
+     * Builds an `on_select` payload matching the Beckn rejection shape: `message.order` echoes the select
+     * order with `beckn:orderStatus` REJECTED (no `beckn:orderValue`), plus top-level `error`.
+     */
+    private static buildRejectedOnSelectPayload(
+        backendSelectPayload: UBCSelectRequestPayload,
+        err: unknown,
+    ): UBCOnSelectRequestPayload {
+        const selectOrder = backendSelectPayload.message.order;
+        const order = JSON.parse(JSON.stringify(selectOrder)) as Record<string, unknown>;
+        delete order['beckn:id'];
+        delete order['beckn:orderValue'];
+        order['beckn:orderStatus'] = OrderStatus.REJECTED;
+
+        const selectBuyer = order['beckn:buyer'] as Record<string, unknown> | undefined;
+        if (selectBuyer && typeof selectBuyer === 'object') {
+            order['beckn:buyer'] = {
+                ...selectBuyer,
+                '@context':
+                    'https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld',
+            };
+        }
+
+        const context = Utils.getBPPContext({
+            ...backendSelectPayload.context,
+            action: BecknAction.on_select,
+        });
+
+        const description =
+            err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
+
+        return {
+            context,
+            message: {
+                order: order as UBCOnSelectRequestPayload['message']['order'],
+            },
+            error: {
+                code: '40000',
+                message: 'Generic business error',
+                details: {
+                    description,
+                },
+            },
+        };
     }
 
     public static translateUBCToBackendPayload(
