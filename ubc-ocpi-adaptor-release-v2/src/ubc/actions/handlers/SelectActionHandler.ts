@@ -87,6 +87,20 @@ export default class SelectActionHandler {
         const reqId = reqPayload.context?.message_id || 'unknown';
         const logData = { action: 'select', messageId: reqId };
 
+        // TESTING MODE: Always reject on_select for any incoming select request.
+        // This bypasses DB/tariff/backend computation and forces a deterministic REJECTED callback to ONIX.
+        const forcedRejected = SelectActionHandler.buildRejectedOnSelectPayload(
+            reqPayload,
+            'Forced REJECTED on_select for testing',
+        );
+        logger.debug(
+            `🟡 [${reqId}] Forcing on_select (REJECTED) for testing`,
+            { data: { logData, forcedRejected } },
+        );
+        await SelectActionHandler.sendOnSelectCallToBecknONIX(forcedRejected);
+        logger.debug(`🟢 [${reqId}] Sent on_select (REJECTED) forced for testing`, { data: {} });
+        return forcedRejected;
+
         try {
             // translate BAP schema to CPO's BE server
             logger.debug(
@@ -149,9 +163,12 @@ export default class SelectActionHandler {
                 await SelectActionHandler.sendOnSelectCallToBecknONIX(rejectedPayload);
                 logger.debug(`🟢 [${reqId}] Sent on_select (REJECTED) to Beckn ONIX`, { data: {} });
             } catch (sendErr: unknown) {
+                const errObj = (sendErr instanceof Error
+                    ? sendErr
+                    : new Error(String(sendErr))) as Error;
                 logger.error(
                     `🔴 [${reqId}] Failed to send on_select REJECTED to Beckn ONIX`,
-                    sendErr instanceof Error ? sendErr : new Error(String(sendErr)),
+                    errObj,
                     { data: { logData } },
                 );
             }
