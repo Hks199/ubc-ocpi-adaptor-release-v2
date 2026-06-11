@@ -223,7 +223,7 @@ export default class CancelActionHandler {
          'beckn:txnRef': sourcePayment['beckn:txnRef'],
          'beckn:paidAt': sourcePayment['beckn:paidAt'],
          'beckn:beneficiary': 'BUYER',
-         'beckn:paymentStatus': BecknPaymentStatus.CANCELLED,
+         'beckn:paymentStatus': BecknPaymentStatus.REFUNDED,
      };
 
      // Include paymentAttributes with only upiTransactionId (no settlementAccounts)

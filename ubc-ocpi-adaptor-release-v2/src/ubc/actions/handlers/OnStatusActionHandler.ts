@@ -280,7 +280,6 @@ export default class OnStatusActionHandler {
         logger.debug(`🟡 [${authorization_reference}] Payment txn found`, { paymentTxn });
 
         const paymentStatus = mapGenericToBecknStatus(paymentTxn.status);
-        
         if (oldPaymentStatus !== (paymentStatus as unknown as GenericPaymentTxnStatus)) {
             const becknTransactionId = paymentTxn.beckn_transaction_id;
 
@@ -311,7 +310,7 @@ export default class OnStatusActionHandler {
                     status: genericStatus,
                 });
                 logger.debug(`🟡 [${authorization_reference}] Updated payment status to`, { paymentTxnId: paymentTxn.id, genericStatus });
-            } 
+        }
             else {
                 logger.debug(`🟡 [${authorization_reference}] Payment status already at target, skipping DB update`, { paymentTxnId: paymentTxn.id, genericStatus });
             }
