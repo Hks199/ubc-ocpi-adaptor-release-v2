@@ -471,102 +471,33 @@ export default class RatingActionHandler {
             });
         }
 
-        // Check if mock_rating_request is enabled
-        if (ocpiPartnerAdditionalProps?.mock_rating_request === true) {
-            logger.debug(`🟡 Mocking rating response for beckn_transaction_id: ${beckn_transaction_id}`);
-            
-            // Return mocked response with session id for feedbackForm
-            const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload = {
-                metadata: {
-                    domain: BecknDomain.EVChargingUBC,
-                },
-                payload: {
-                    success: true,
-                    session_id: session.id, // Pass session id for feedbackForm
-                },
-            };
+        // Mock mode is always active — skip the real CPO call and return a
+        // synthetic success response. The on_rating callback will be sent
+        // automatically by the caller (handleEVChargingUBCBppRatingAction).
+        logger.debug(`🟡 [ALWAYS-MOCK] Mocking rating response for beckn_transaction_id: ${beckn_transaction_id}`);
 
-            if (ratingRecordId) {
-                await RatingRecordDbService.update(ratingRecordId, {
-                    backend_response: backendOnRatingResponsePayload as any,
-                    status: 'MOCKED',
-                    additional_props: {
-                        mock_rating_request: true,
-                    } as any,
-                });
-            }
-
-            return backendOnRatingResponsePayload;
-        }
-
-        // Continue with actual backend call
-        if (!session.location_id ) {
-            throw new Error(`Location ID not found in session for authorization_reference: ${paymentTxn.authorization_reference}`);
-        }
-
-        const submitRating =
-            ocpiPartnerAdditionalProps?.communication_urls?.submit_rating;
-        
-        if (!submitRating) {
-            throw new Error('Submit rating endpoint not found in partner configuration');
-        }
-
-        const submitRatingUrl = submitRating.url;
-        const submitRatingAuthToken = submitRating.auth_token;
-
-        // Prepare request payload for CPO
-        const submitRatingPayload: SubmitRatingRequestPayload = {
-            location_id: session.location_id,
-            rating: rating,
-            auth_reference: paymentTxn.authorization_reference,
-        };
-        
-        // Add optional fields if they exist
-        if (comments) {
-            submitRatingPayload.comments = comments;
-        }
-        if (tags && tags.length > 0) {
-            submitRatingPayload.tags = tags;
-        }
-
-        // Prepare headers
-        const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-        };
-        if (submitRatingAuthToken) {
-            headers['Authorization'] = `${submitRatingAuthToken}`;
-        }
-
-        // Call CPO's submit rating API
-        // CPOBackendRequestService returns response.data directly
-        const responseData = await CPOBackendRequestService.sendPostRequest({
-            url: submitRatingUrl,
-            data: submitRatingPayload,
-            headers: headers,
-        });
-        
         const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload = {
             metadata: {
                 domain: BecknDomain.EVChargingUBC,
             },
             payload: {
-                success: responseData.success ?? true,
-                message: responseData.message,
-                feedbackForm: responseData.feedbackForm,
-                session_id: session.id, // Pass session id for feedbackForm
+                success: true,
+                session_id: session.id, // Used as submission_id in feedbackForm
             },
         };
 
         if (ratingRecordId) {
             await RatingRecordDbService.update(ratingRecordId, {
-                backend_url: submitRatingUrl,
-                backend_request: submitRatingPayload as any,
                 backend_response: backendOnRatingResponsePayload as any,
-                status: 'FORWARDED',
+                status: 'MOCKED',
+                additional_props: {
+                    mock_rating_request: true, // always mocked
+                } as any,
             });
         }
 
         return backendOnRatingResponsePayload;
+
     }
 
     public static translateBackendToUBC(
