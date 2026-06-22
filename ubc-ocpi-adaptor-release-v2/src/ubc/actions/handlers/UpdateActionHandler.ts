@@ -323,6 +323,20 @@ export default class UpdateActionHandler {
             const evseConnector = connectorData.connector;
             const evse = connectorData.evse;
             const location = connectorData.location;
+
+            // ── Test-mode detection ──────────────────────────────────────────────────
+            // Check if this partner is flagged as test_mode (UAT/sandbox).
+            // In test_mode, no real CPO exists so calling startCharging would throw a
+            // ValidationError (partner not found / no credentials / no token).
+            // We bypass the real call and treat the command as immediately ACCEPTED so
+            // that runTestModeSessionLifecycle fires and the synthetic session can
+            // progress to COMPLETED, allowing the BAP to trigger /rating.
+            const startPartner = evse.partner_id
+                ? await OCPIPartnerDbService.getById(evse.partner_id)
+                : null;
+            const startPartnerProps = startPartner?.additional_props as OCPIPartnerAdditionalProps | undefined;
+            const isTestMode = startPartnerProps?.test_mode === true;
+            // ─────────────────────────────────────────────────────────────────────────
     
             const req = {
                 body: {
@@ -363,9 +377,27 @@ export default class UpdateActionHandler {
                     data: sessionData,
                 });
             }
-            const response = await AdminCommandsModule.startCharging(req);
-            const ocpiCommandResponse = response.payload.data as OCPICommandResponseResponse;
-            const isAccepted = ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED;
+
+            let isAccepted: boolean;
+
+            if (isTestMode) {
+                // ── UAT/sandbox: bypass real CPO command ──────────────────────────────
+                // The partner has test_mode=true, meaning there is no real CPO backend.
+                // Treat StartSession as immediately ACCEPTED so the synthetic lifecycle
+                // (runTestModeSessionLifecycle) fires and drives the session to COMPLETED.
+                logger.warn(
+                    `🟡 [UpdateActionHandler] Partner ${evse.partner_id} is in test_mode — ` +
+                    `bypassing real startCharging CPO call. Synthetic lifecycle will be triggered.`,
+                );
+                isAccepted = true;
+                // ─────────────────────────────────────────────────────────────────────
+            } else {
+                // ── Production: send real OCPI START_SESSION command to CPO ──────────
+                const response = await AdminCommandsModule.startCharging(req);
+                const ocpiCommandResponse = response.payload.data as OCPICommandResponseResponse;
+                isAccepted = ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED;
+                // ─────────────────────────────────────────────────────────────────────
+            }
 
             // In test_mode (UAT/sandbox) the CPO does not push OCPI session updates or CDR.
             // Simulate the full lifecycle so the app receives on_update ACTIVE → on_update COMPLETED.
