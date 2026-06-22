@@ -25,7 +25,6 @@ import { OCPIPartnerAdditionalProps } from '../../../types/OCPIPartner';
 import CPOBackendRequestService from '../../services/CPOBackendRequestService';
 import { RatingMessage } from '../../schema/v2.0.0/actions/rating/types/OnRatingPayload';
 import PaymentTxnDbService from '../../../db-services/PaymentTxnDbService';
-import RatingRecordDbService from '../../../db-services/RatingRecordDbService';
 
 /**
  * Handler for rating action
@@ -279,7 +278,6 @@ export default class RatingActionHandler {
     ): Promise<UBCOnRatingRequestPayload> {
         const reqId = reqPayload.context?.message_id || 'unknown';
         const logData = { action: 'rating', messageId: reqId };
-        let ratingRecordId: string | null = null;
         let lastOnRatingPayload: UBCOnRatingRequestPayload | undefined;
 
         const jobs = RatingActionHandler.expandRatingJobs(reqPayload);
@@ -291,7 +289,6 @@ export default class RatingActionHandler {
             for (let i = 0; i < jobs.length; i++) {
                 const normalizedPayload = jobs[i];
                 const jobReqId = normalizedPayload.context?.message_id || reqId;
-                ratingRecordId = null;
 
                 logger.debug(
                     `🟡 [${jobReqId}] Translating UBC to Backend payload (rating job ${i + 1}/${jobs.length})`,
@@ -299,18 +296,13 @@ export default class RatingActionHandler {
                 );
                 const backendRatingPayload: ExtractedRatingRequestBody =
                     RatingActionHandler.translateUBCToBackendPayload(normalizedPayload);
-                const ratingRecord = await RatingActionHandler.createRatingRecord(
-                    normalizedPayload,
-                    backendRatingPayload,
-                );
-                ratingRecordId = ratingRecord.id;
 
                 logger.debug(
                     `🟡 [${jobReqId}] Sending rating call to backend (rating job ${i + 1}/${jobs.length})`,
                     { data: { backendRatingPayload } },
                 );
                 const backendOnRatingResponsePayload: ExtractedOnRatingResponsePayload =
-                    await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload, ratingRecordId);
+                    await RatingActionHandler.sendRatingCallToBackend(backendRatingPayload);
                 logger.debug(
                     `🟢 [${jobReqId}] Received rating response from backend`,
                     { data: { backendOnRatingResponsePayload } },
@@ -328,17 +320,9 @@ export default class RatingActionHandler {
                     { data: { ubcOnRatingPayload } },
                 );
                 const response = await RatingActionHandler.sendOnRatingCallToBecknONIX(ubcOnRatingPayload);
-                await RatingRecordDbService.update(ratingRecordId, {
-                    on_rating_payload: ubcOnRatingPayload as any,
-                    status: 'ON_RATING_SENT',
-                    additional_props: {
-                        on_rating_ack: response,
-                    } as any,
-                });
                 logger.debug(`🟢 [${jobReqId}] Sent on_rating (job ${i + 1}/${jobs.length})`, { data: { response } });
 
                 lastOnRatingPayload = ubcOnRatingPayload;
-                ratingRecordId = null;
             }
 
             if (!lastOnRatingPayload) {
@@ -347,12 +331,6 @@ export default class RatingActionHandler {
             return lastOnRatingPayload;
         }
         catch (e: any) {
-            if (ratingRecordId) {
-                await RatingRecordDbService.update(ratingRecordId, {
-                    status: 'FAILED',
-                    error_message: e?.message || e?.toString?.() || 'Unknown error',
-                });
-            }
             logger.error(
                 `🔴 [${reqId}] Error in UBCBppActionService.handleEVChargingUBCBppRatingAction: ${e?.toString()}`,
                 e,
@@ -395,34 +373,10 @@ export default class RatingActionHandler {
         return backendRatingPayload;
     }
 
-    public static async createRatingRecord(
-        payload: UBCRatingRequestPayload,
-        backendPayload: ExtractedRatingRequestBody
-    ) {
-        return RatingRecordDbService.create({
-            data: {
-                beckn_transaction_id: payload.context.transaction_id,
-                message_id: payload.context.message_id,
-                bpp_id: payload.context.bpp_id,
-                bpp_uri: payload.context.bpp_uri,
-                bap_id: payload.context.bap_id,
-                bap_uri: payload.context.bap_uri,
-                rating_value: Number(payload.message.value),
-                rating_category: String(payload.message.category ?? RatingActionHandler.DEFAULT_CATEGORY),
-                best_rating: payload.message.best,
-                worst_rating: payload.message.worst,
-                auth_reference: backendPayload.payload.auth_reference,
-                comments: backendPayload.payload.comments,
-                tags: backendPayload.payload.tags as any,
-                backend_request: backendPayload as any,
-                status: 'RECEIVED',
-            },
-        });
-    }
+
 
     public static async sendRatingCallToBackend(
-        payload: ExtractedRatingRequestBody,
-        ratingRecordId?: string | null
+        payload: ExtractedRatingRequestBody
     ): Promise<ExtractedOnRatingResponsePayload> {
         const { rating, comments, tags } = payload.payload;
         const { beckn_transaction_id } = payload.metadata;
@@ -461,16 +415,6 @@ export default class RatingActionHandler {
         const ocpiPartnerAdditionalProps =
             ocpiPartner.additional_props as OCPIPartnerAdditionalProps;
 
-        if (ratingRecordId) {
-            await RatingRecordDbService.update(ratingRecordId, {
-                payment_txn_id: paymentTxn.id,
-                session_id: session.id,
-                partner_id: session.partner_id,
-                auth_reference: paymentTxn.authorization_reference,
-                status: 'RESOLVED',
-            });
-        }
-
         // Mock mode is always active — skip the real CPO call and return a
         // synthetic success response. The on_rating callback will be sent
         // automatically by the caller (handleEVChargingUBCBppRatingAction).
@@ -485,16 +429,6 @@ export default class RatingActionHandler {
                 session_id: session.id, // Used as submission_id in feedbackForm
             },
         };
-
-        if (ratingRecordId) {
-            await RatingRecordDbService.update(ratingRecordId, {
-                backend_response: backendOnRatingResponsePayload as any,
-                status: 'MOCKED',
-                additional_props: {
-                    mock_rating_request: true, // always mocked
-                } as any,
-            });
-        }
 
         return backendOnRatingResponsePayload;
 
