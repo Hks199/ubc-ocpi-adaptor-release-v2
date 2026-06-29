@@ -1,13 +1,21 @@
 import { Support } from "../../../types/Support";
 import { Context } from "../../../types/Context";
 
-// v0.9: OnSupport message with simplified support object (no @context/@type)
+export type SupportFeedback = {
+    "@context"?: string;
+    "@type"?: string;
+    supportStatus?: string;
+    comments?: string;
+};
+
 export type OnSupportMessage = {
-    support: Support
+    support: Support;
+    feedback?: SupportFeedback;
 };
 
 export type UBCOnSupportRequestPayload = {
-    context: Context,
-    message: OnSupportMessage,
+    context: Context;
+    message: OnSupportMessage;
+    error?: any;
 };
 

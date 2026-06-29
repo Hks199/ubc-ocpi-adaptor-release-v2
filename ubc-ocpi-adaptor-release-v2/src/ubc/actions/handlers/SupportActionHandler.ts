@@ -10,6 +10,7 @@ import { UBCOnSupportRequestPayload } from "../../schema/v2.0.0/actions/support/
 import { BecknDomain } from "../../schema/v2.0.0/enums/BecknDomain";
 import BppOnixRequestService from "../../services/BppOnixRequestService";
 import Utils from "../../../utils/Utils";
+import GLOBAL_VARS from "../../../constants/global-vars";
 import { ExtractedOnSupportResponsePayload } from "../../schema/v2.0.0/actions/support/types/ExtractedOnSupportResponsePayload";
 import { ExtractedSupportRequestPayload } from "../../schema/v2.0.0/actions/support/types/ExtractedSupportRequestPayload";
 import OCPIPartnerDbService from "../../../db-services/OCPIPartnerDbService";
@@ -63,6 +64,9 @@ export default class SupportActionHandler {
             logger.debug(`🟡 [${reqId}] Sending on_support call to Beckn ONIX in handleEVChargingUBCBppSupportAction`, { data: { ubcOnSupportPayload } });
             const response = await SupportActionHandler.sendOnSupportCallToBecknONIX(ubcOnSupportPayload);
             logger.debug(`🟢 [${reqId}] Sent on_support call to Beckn ONIX in handleEVChargingUBCBppSupportAction`, { data: { response } });
+
+            // Schedule follow up support calls (IN_PROGRESS after 4 mins, RESOLVED after 8 mins)
+            SupportActionHandler.scheduleFollowUpSupportCalls(reqPayload);
 
             // return the response
             return ubcOnSupportPayload;
@@ -163,14 +167,20 @@ export default class SupportActionHandler {
                 support: {
                     "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
                     "@type": "beckn:SupportInfo",
-                    name: supportData.name,
-                    phone: supportData.phone,
-                    email: supportData.email,
-                    url: supportData.url,
-                    hours: supportData.hours,
-                    channels: channels,
+                    name: supportData.name || "BlueCharge Support Team",
+                    phone: supportData.phone || "18001080",
+                    email: supportData.email || "support@bluechargenet-aggregator.io",
+                    url: supportData.url || "https://support.bluechargenet-aggregator.io/ticket/SUP-20250730-001",
+                    hours: supportData.hours || "Mon–Sun 24/7 IST",
+                    channels: channels.length > 0 ? channels : ["PHONE", "EMAIL", "WEB", "CHAT"],
                 },
+                feedback: {
+                    "@context": "https://raw.githubusercontent.com/bhim/ubc-tsd/main/beckn-schemas/UBCExtensions/v1/context.jsonld",
+                    "@type": "SupportFeedback",
+                    supportStatus: "ACKNOWLEDGED"
+                }
             },
+            error: {}
         };
         return ubcOnSupportPayload;
     }
@@ -185,6 +195,77 @@ export default class SupportActionHandler {
             url: `${bppHost}/${BecknAction.on_support}`,
             data: payload,
         }, BecknDomain.EVChargingUBC);
+    }
+
+    public static scheduleFollowUpSupportCalls(reqPayload: UBCSupportRequestPayload) {
+        // 1st follow up: after configurable in-progress delay (default 4 minutes)
+        setTimeout(async () => {
+            try {
+                const context = Utils.getBPPContext({
+                    ...reqPayload.context,
+                    action: BecknAction.on_support,
+                });
+                context.message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+                context.timestamp = new Date().toISOString();
+
+                const payload: UBCOnSupportRequestPayload = {
+                    context,
+                    message: {
+                        support: {
+                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
+                            "@type": "beckn:SupportInfo",
+                        },
+                        feedback: {
+                            "@context": "https://raw.githubusercontent.com/bhim/ubc-tsd/main/beckn-schemas/UBCExtensions/v1/context.jsonld",
+                            "@type": "SupportFeedback",
+                            supportStatus: "IN_PROGRESS"
+                        }
+                    },
+                    error: {}
+                };
+
+                logger.debug(`[synthetic-support] Sending 2nd on_support (IN_PROGRESS) with messageId ${context.message_id}`);
+                const response = await SupportActionHandler.sendOnSupportCallToBecknONIX(payload);
+                logger.debug(`[synthetic-support] Sent 2nd on_support successfully`, { data: { response } });
+            } catch (err: any) {
+                logger.error(`[synthetic-support] Error in sending scheduled on_support (IN_PROGRESS)`, err);
+            }
+        }, GLOBAL_VARS.SUPPORT_IN_PROGRESS_DELAY_MS);
+
+        // 2nd follow up: after configurable resolved delay (default 8 minutes)
+        setTimeout(async () => {
+            try {
+                const context = Utils.getBPPContext({
+                    ...reqPayload.context,
+                    action: BecknAction.on_support,
+                });
+                context.message_id = "f9e8d7c6-b5a4-3210-fedc-ba9876543210";
+                context.timestamp = new Date().toISOString();
+
+                const payload: UBCOnSupportRequestPayload = {
+                    context,
+                    message: {
+                        support: {
+                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
+                            "@type": "beckn:SupportInfo",
+                        },
+                        feedback: {
+                            "@context": "https://raw.githubusercontent.com/bhim/ubc-tsd/main/beckn-schemas/UBCExtensions/v1/context.jsonld",
+                            "@type": "SupportFeedback",
+                            supportStatus: "RESOLVED",
+                            comments: "Billing discrepancy confirmed. A refund of INR 68.95 has been initiated to your UPI ID. Please allow 2-3 business days for the refund to reflect."
+                        }
+                    },
+                    error: {}
+                };
+
+                logger.debug(`[synthetic-support] Sending 3rd on_support (RESOLVED) with messageId ${context.message_id}`);
+                const response = await SupportActionHandler.sendOnSupportCallToBecknONIX(payload);
+                logger.debug(`[synthetic-support] Sent 3rd on_support successfully`, { data: { response } });
+            } catch (err: any) {
+                logger.error(`[synthetic-support] Error in sending scheduled on_support (RESOLVED)`, err);
+            }
+        }, GLOBAL_VARS.SUPPORT_RESOLVED_DELAY_MS);
     }
 
     static async sendErrorOnSupportResponse(originalRequest: UBCSupportRequestPayload, error: Error): Promise<void> {
@@ -210,6 +291,7 @@ export default class SupportActionHandler {
                     channels: [],
                 },
             },
+            error: {}
         };
 
         logger.debug(`🟡 Sending error on_support response due to processing failure`, { 
