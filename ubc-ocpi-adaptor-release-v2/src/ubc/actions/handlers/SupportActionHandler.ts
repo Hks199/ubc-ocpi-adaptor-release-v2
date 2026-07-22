@@ -66,7 +66,7 @@ export default class SupportActionHandler {
             logger.debug(`🟢 [${reqId}] Sent on_support call to Beckn ONIX in handleEVChargingUBCBppSupportAction`, { data: { response } });
 
             // Schedule follow up support calls (IN_PROGRESS after 4 mins, RESOLVED after 8 mins)
-            SupportActionHandler.scheduleFollowUpSupportCalls(reqPayload);
+            SupportActionHandler.scheduleFollowUpSupportCalls(reqPayload, ubcOnSupportPayload.message.support);
 
             // return the response
             return ubcOnSupportPayload;
@@ -197,7 +197,9 @@ export default class SupportActionHandler {
         }, BecknDomain.EVChargingUBC);
     }
 
-    public static scheduleFollowUpSupportCalls(reqPayload: UBCSupportRequestPayload) {
+    public static scheduleFollowUpSupportCalls(reqPayload: UBCSupportRequestPayload, supportData: Support) {
+        const originalMessageId = reqPayload.context.message_id;
+
         // 1st follow up: after configurable in-progress delay (default 4 minutes)
         setTimeout(async () => {
             try {
@@ -205,16 +207,14 @@ export default class SupportActionHandler {
                     ...reqPayload.context,
                     action: BecknAction.on_support,
                 });
-                context.message_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+                // Preserve the original message_id so BAP can correlate this response
+                context.message_id = originalMessageId;
                 context.timestamp = new Date().toISOString();
 
                 const payload: UBCOnSupportRequestPayload = {
                     context,
                     message: {
-                        support: {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
-                            "@type": "beckn:SupportInfo",
-                        },
+                        support: supportData,
                         feedback: {
                             "@context": "https://raw.githubusercontent.com/bhim/ubc-tsd/main/beckn-schemas/UBCExtensions/v1/context.jsonld",
                             "@type": "SupportFeedback",
@@ -239,16 +239,14 @@ export default class SupportActionHandler {
                     ...reqPayload.context,
                     action: BecknAction.on_support,
                 });
-                context.message_id = "f9e8d7c6-b5a4-3210-fedc-ba9876543210";
+                // Preserve the original message_id so BAP can correlate this response
+                context.message_id = originalMessageId;
                 context.timestamp = new Date().toISOString();
 
                 const payload: UBCOnSupportRequestPayload = {
                     context,
                     message: {
-                        support: {
-                            "@context": "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
-                            "@type": "beckn:SupportInfo",
-                        },
+                        support: supportData,
                         feedback: {
                             "@context": "https://raw.githubusercontent.com/bhim/ubc-tsd/main/beckn-schemas/UBCExtensions/v1/context.jsonld",
                             "@type": "SupportFeedback",
