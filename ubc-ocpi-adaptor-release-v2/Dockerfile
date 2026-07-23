@@ -45,6 +45,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # Change ownership to non-root user
+
 RUN chmod +x /app/docker-entrypoint.sh && \
     chown -R nodejs:nodejs /app
 
