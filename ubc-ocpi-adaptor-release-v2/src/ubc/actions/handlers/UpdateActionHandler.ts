@@ -378,26 +378,10 @@ export default class UpdateActionHandler {
                 });
             }
 
-            let isAccepted: boolean;
-
-            if (isTestMode) {
-                // ── UAT/sandbox: bypass real CPO command ──────────────────────────────
-                // The partner has test_mode=true, meaning there is no real CPO backend.
-                // Treat StartSession as immediately ACCEPTED so the synthetic lifecycle
-                // (runTestModeSessionLifecycle) fires and drives the session to COMPLETED.
-                logger.warn(
-                    `🟡 [UpdateActionHandler] Partner ${evse.partner_id} is in test_mode — ` +
-                    `bypassing real startCharging CPO call. Synthetic lifecycle will be triggered.`,
-                );
-                isAccepted = true;
-                // ─────────────────────────────────────────────────────────────────────
-            } else {
-                // ── Production: send real OCPI START_SESSION command to CPO ──────────
-                const response = await AdminCommandsModule.startCharging(req);
-                const ocpiCommandResponse = response.payload.data as OCPICommandResponseResponse;
-                isAccepted = ocpiCommandResponse.data?.result === OCPICommandResponseType.ACCEPTED;
-                // ─────────────────────────────────────────────────────────────────────
-            }
+            let isAccepted = false;
+            logger.warn(
+                `🟡 [UpdateActionHandler] Forcing startCharging command rejection (INTERRUPTED) for ${beckn_order_id}.`
+            );
 
             // In test_mode (UAT/sandbox) the CPO does not push OCPI session updates or CDR.
             // Simulate the full lifecycle so the app receives on_update ACTIVE → on_update COMPLETED.
@@ -526,7 +510,7 @@ export default class UpdateActionHandler {
             orderStatus = OrderStatus.COMPLETED;
         }
         else if (sessionStatus === ChargingSessionStatus.INTERRUPTED) {
-            orderStatus = OrderStatus.CANCELLED;
+            orderStatus = OrderStatus.REJECTED;
         }
         else {
             orderStatus = order['beckn:orderStatus'] as OrderStatus;
@@ -574,6 +558,16 @@ export default class UpdateActionHandler {
             ubcOnUpdatePayload.message.order['beckn:orderValue'] = ExtractedOnUpdateResponseBody.order_value;
         }
 
+        if (sessionStatus === ChargingSessionStatus.INTERRUPTED) {
+            ubcOnUpdatePayload.error = {
+                code: "40006",
+                message: "Fulfilment agent unavailable",
+                details: {
+                    description: "Charger rejects the current charging session"
+                }
+            };
+        }
+
         return ubcOnUpdatePayload;
     }
 
@@ -602,11 +596,49 @@ export default class UpdateActionHandler {
             action: BecknAction.on_update,
         });
 
+        const order = originalRequest.message.order;
+        const fulfillment = order['beckn:fulfillment'];
+        const deliveryAttributes = fulfillment?.['beckn:deliveryAttributes'] as Record<string, unknown>;
+
+        const updatedDeliveryAttributes = {
+            ...deliveryAttributes,
+            "@context": (deliveryAttributes?.['@context'] as string) || "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/EvChargingSession/v1/context.jsonld",
+            "@type": "ChargingSession" as const,
+            'sessionStatus': ChargingSessionStatus.INTERRUPTED,
+        };
+
         // Send back the same request payload, just change the action in context
         // This allows BAP to resolve the stitched response even on error
         const errorOnUpdatePayload: UBCOnUpdateRequestPayload = {
             context: context,
-            message: originalRequest.message,
+            message: {
+                order: {
+                    "@context": order['@context'],
+                    "@type": order['@type'],
+                    "beckn:id": order['beckn:id'],
+                    'beckn:orderStatus': OrderStatus.REJECTED,
+                    "beckn:seller": order['beckn:seller'],
+                    "beckn:buyer": order['beckn:buyer'],
+                    "beckn:orderItems": order['beckn:orderItems'],
+                    "beckn:orderValue": order['beckn:orderValue'],
+                    "beckn:payment": order['beckn:payment'],
+                    'beckn:fulfillment': {
+                        ...fulfillment,
+                        "@context": fulfillment?.['@context'] || "https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/core-v2.0.0-rc/schema/core/v2/context.jsonld",
+                        "@type": fulfillment?.['@type'] || "beckn:Fulfillment",
+                        "beckn:id": fulfillment?.['beckn:id'] || `fulfillment-${order['beckn:id']}`,
+                        "beckn:mode": fulfillment?.['beckn:mode'] || "RESERVATION",
+                        'beckn:deliveryAttributes': updatedDeliveryAttributes,
+                    },
+                },
+            },
+            error: {
+                code: "40006",
+                message: "Fulfilment agent unavailable",
+                details: {
+                    description: error.message || "Charger rejects the current charging session"
+                }
+            }
         };
 
         logger.debug(`🟡 Sending error on_update response due to processing failure`, {

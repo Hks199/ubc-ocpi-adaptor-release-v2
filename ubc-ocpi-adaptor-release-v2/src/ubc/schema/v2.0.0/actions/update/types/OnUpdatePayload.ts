@@ -11,6 +11,7 @@ export type UBCOnUpdateRequestPayload = {
     message: {
         order: UBCOnUpdateOrder;
     };
+    error?: any;
 };
 
 export type UBCOnUpdateOrder = {
