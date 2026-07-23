@@ -1,0 +1,139 @@
+{"level":"info","time":"2026-07-23T10:22:45Z","message":"Starting application with config: /app/config/adapter.yaml"}
+{"level":"info","time":"2026-07-23T10:22:45Z","message":"Initializing logger with config: {Level:debug Destinations:[{Type:stdout Config:map[]}] ContextKeys:[transaction_id message_id subscriber_id module_id parent_id]}"}
+{"level":"info","time":"2026-07-23T10:22:45Z","message":"POD_NAME environment variable not set, falling back to hostname"}
+{"level":"info","time":"2026-07-23T10:22:45Z","message":"Setting POD name as hostname: ddcb22c1cb70"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing plugin manager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"RemoteRoot : "}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: cache"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: cache in 31.381761ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: consumer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: consumer in 33.429049ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: decrypter"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: decrypter in 44.008513ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: dediregistry"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: dediregistry in 21.803788ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: encrypter"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: encrypter in 15.952255ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: kafkaconsumer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: kafkaconsumer in 38.018967ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: keymanager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: keymanager in 42.285956ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: otelsetup"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: otelsetup in 62.810828ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: publisher"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: publisher in 56.387842ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: rabbitmqconsumer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: rabbitmqconsumer in 40.815222ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: registry"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: registry in 38.985456ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: reqpreprocessor"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: reqpreprocessor in 20.128535ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: router"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: router in 24.975277ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: schemav2validator"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: schemav2validator in 26.210891ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: schemavalidator"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: schemavalidator in 44.176629ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: signer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: signer in 24.157603ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: signvalidator"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: signvalidator in 22.204825ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading plugin: simplekeymanager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded plugin: simplekeymanager in 25.103689ms"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Plugin manager loaded."}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping OtelSetup plugin: not configured"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing HTTP server"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registering modules with config: []module.Config{module.Config{Name:\"bppTxnReceiver\", Path:\"/bpp/receiver/\", Handler:handler.Config{Plugins:handler.PluginCfg{SchemaValidator:(*plugin.Config)(nil), SignValidator:(*plugin.Config)(0xc000010588), Publisher:(*plugin.Config)(nil), Signer:(*plugin.Config)(nil), Router:(*plugin.Config)(0xc0000105a0), Cache:(*plugin.Config)(0xc000010570), Registry:(*plugin.Config)(0xc000010528), KeyManager:(*plugin.Config)(0xc000010558), KafkaProducer:(*plugin.Config)(nil), KafkaConsumer:(*plugin.Config)(nil), RabbitMQConsumer:(*plugin.Config)(nil), Consumer:(*plugin.Config)(nil), TransportWrapper:(*plugin.Config)(nil), Middleware:[]plugin.Config{plugin.Config{ID:\"reqpreprocessor\", Config:map[string]string{\"contextKeys\":\"transaction_id,message_id,parent_id\", \"role\":\"bpp\"}}}, Steps:[]plugin.Config(nil)}, Steps:[]string{\"validateSign\", \"addRoute\"}, Type:\"std\", RegistryURL:\"\", Role:\"bpp\", SubscriberID:\"uat-bpp-opci-adapter.ubc.nbsl.org.in\", HttpClientConfig:handler.HttpClientConfig{MaxIdleConns:1000, IdleConnTimeout:300000000000, MaxIdleConnsPerHost:200, ResponseHeaderTimeout:5000000000}}}, module.Config{Name:\"bppTxnCaller\", Path:\"/bpp/caller/\", Handler:handler.Config{Plugins:handler.PluginCfg{SchemaValidator:(*plugin.Config)(nil), SignValidator:(*plugin.Config)(nil), Publisher:(*plugin.Config)(nil), Signer:(*plugin.Config)(0xc0000106c0), Router:(*plugin.Config)(0xc0000106a8), Cache:(*plugin.Config)(0xc000010690), Registry:(*plugin.Config)(0xc000010660), KeyManager:(*plugin.Config)(0xc000010678), KafkaProducer:(*plugin.Config)(nil), KafkaConsumer:(*plugin.Config)(nil), RabbitMQConsumer:(*plugin.Config)(nil), Consumer:(*plugin.Config)(nil), TransportWrapper:(*plugin.Config)(nil), Middleware:[]plugin.Config{plugin.Config{ID:\"reqpreprocessor\", Config:map[string]string{\"contextKeys\":\"transaction_id,message_id,parent_id\", \"role\":\"bpp\"}}}, Steps:[]plugin.Config(nil)}, Steps:[]string{\"addRoute\", \"sign\"}, Type:\"std\", RegistryURL:\"\", Role:\"bpp\", SubscriberID:\"uat-bpp-opci-adapter.ubc.nbsl.org.in\", HttpClientConfig:handler.HttpClientConfig{MaxIdleConns:1000, IdleConnTimeout:300000000000, MaxIdleConnsPerHost:200, ResponseHeaderTimeout:5000000000}}}}"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.cacheProvider, expected type: <nil> for plugin cache"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: cache"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache config mapped: &{Addr:redis-onix-bpp:6379 UseTLS:false}"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing Cache with config: &{Addr:redis-onix-bpp:6379 UseTLS:false}"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache connection to Redis established successfully"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Cache plugin: cache"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.registryProvider, expected type: <nil> for plugin registry"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: registry"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry config mapped: &{URL:http://mock-registry:3030 RetryMax:3 RetryWaitMin:100ms RetryWaitMax:500ms}"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing Registry client with config: &{URL:http://mock-registry:3030 RetryMax:3 RetryWaitMin:100ms RetryWaitMax:500ms}"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry client is created successfully"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Registry plugin: registry"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.simpleKeyManagerProvider, expected type: <nil> for plugin simplekeymanager"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: simplekeymanager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager config mapped: np=uat-bpp-opci-adapter.ubc.nbsl.org.in, keyId=76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH, has_signing_private=true, has_signing_public=true, has_encr_private=true, has_encr_public=true"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing SimpleKeyManager plugin"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Creating SimpleKeyManager instance"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading keys from configuration"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Successfully loaded keyset from configuration with keyID: 76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager plugin initialized successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Keymanager plugin: simplekeymanager"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.provider, expected type: <nil> for plugin signvalidator"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: signvalidator"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded SignValidator plugin: signvalidator"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping SchemaValidator plugin: not configured"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.RouterProvider, expected type: <nil> for plugin router"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: router"}
+WARNING: Domain field 'beckn.one:deg:ev-charging' is not needed for version 2.0.0 and will be ignored. Consider removing it from your config.
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Router plugin: router"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping Publisher plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping Signer plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping KafkaProducer plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping TransportWrapper plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"All required plugins successfully loaded for stdHandler"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Processor steps initialized: [validateSign addRoute]"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Applying 1 middleware(s) to the handler"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading middleware: reqpreprocessor"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.provider, expected type: <nil> for plugin reqpreprocessor"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: reqpreprocessor"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Applied middleware: reqpreprocessor"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Middleware chain setup completed"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registering handler bppTxnReceiver, of type std @ /bpp/receiver/"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.cacheProvider, expected type: <nil> for plugin cache"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: cache"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache config mapped: &{Addr:redis-onix-bpp:6379 UseTLS:false}"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing Cache with config: &{Addr:redis-onix-bpp:6379 UseTLS:false}"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache connection to Redis established successfully"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Cache instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Cache plugin: cache"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.registryProvider, expected type: <nil> for plugin registry"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: registry"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry config mapped: &{URL:http://mock-registry:3030 RetryMax:3 RetryWaitMin:100ms RetryWaitMax:500ms}"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing Registry client with config: &{URL:http://mock-registry:3030 RetryMax:3 RetryWaitMin:100ms RetryWaitMax:500ms}"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry client is created successfully"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registry instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Registry plugin: registry"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.simpleKeyManagerProvider, expected type: <nil> for plugin simplekeymanager"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: simplekeymanager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager config mapped: np=uat-bpp-opci-adapter.ubc.nbsl.org.in, keyId=76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH, has_signing_private=true, has_signing_public=true, has_encr_private=true, has_encr_public=true"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Initializing SimpleKeyManager plugin"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Creating SimpleKeyManager instance"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading keys from configuration"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Successfully loaded keyset from configuration with keyID: 76EU8AV7JusA4x7bLLTRLsiPJUmuFXgjoZggE3KV767ZKocKZX9WqH"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager plugin initialized successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"SimpleKeyManager instance created successfully"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Keymanager plugin: simplekeymanager"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping SignValidator plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping SchemaValidator plugin: not configured"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.RouterProvider, expected type: <nil> for plugin router"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: router"}
+WARNING: Domain field 'beckn.one:deg:ev-charging' is not needed for version 2.0.0 and will be ignored. Consider removing it from your config.
+WARNING: Domain field 'beckn.one:deg:ev-charging' is not needed for version 2.0.0 and will be ignored. Consider removing it from your config.
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Router plugin: router"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping Publisher plugin: not configured"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.SignerProvider, expected type: <nil> for plugin signer"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: signer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loaded Signer plugin: signer"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping KafkaProducer plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Skipping TransportWrapper plugin: not configured"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"All required plugins successfully loaded for stdHandler"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Processor steps initialized: [addRoute sign]"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Applying 1 middleware(s) to the handler"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Loading middleware: reqpreprocessor"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Provider type: *main.provider, expected type: <nil> for plugin reqpreprocessor"}
+{"level":"debug","time":"2026-07-23T10:22:45Z","message":"Casting successful for: reqpreprocessor"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Applied middleware: reqpreprocessor"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Middleware chain setup completed"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registering handler bppTxnCaller, of type std @ /bpp/caller/"}
+{"level":"debug","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"Registering queue handlers with config: []module.Config{module.Config{Name:\"bppTxnReceiver\", Path:\"/bpp/receiver/\", Handler:handler.Config{Plugins:handler.PluginCfg{SchemaValidator:(*plugin.Config)(nil), SignValidator:(*plugin.Config)(0xc000010588), Publisher:(*plugin.Config)(nil), Signer:(*plugin.Config)(nil), Router:(*plugin.Config)(0xc0000105a0), Cache:(*plugin.Config)(0xc000010570), Registry:(*plugin.Config)(0xc000010528), KeyManager:(*plugin.Config)(0xc000010558), KafkaProducer:(*plugin.Config)(nil), KafkaConsumer:(*plugin.Config)(nil), RabbitMQConsumer:(*plugin.Config)(nil), Consumer:(*plugin.Config)(nil), TransportWrapper:(*plugin.Config)(nil), Middleware:[]plugin.Config{plugin.Config{ID:\"reqpreprocessor\", Config:map[string]string{\"contextKeys\":\"transaction_id,message_id,parent_id\", \"role\":\"bpp\"}}}, Steps:[]plugin.Config(nil)}, Steps:[]string{\"validateSign\", \"addRoute\"}, Type:\"std\", RegistryURL:\"\", Role:\"bpp\", SubscriberID:\"uat-bpp-opci-adapter.ubc.nbsl.org.in\", HttpClientConfig:handler.HttpClientConfig{MaxIdleConns:1000, IdleConnTimeout:300000000000, MaxIdleConnsPerHost:200, ResponseHeaderTimeout:5000000000}}}, module.Config{Name:\"bppTxnCaller\", Path:\"/bpp/caller/\", Handler:handler.Config{Plugins:handler.PluginCfg{SchemaValidator:(*plugin.Config)(nil), SignValidator:(*plugin.Config)(nil), Publisher:(*plugin.Config)(nil), Signer:(*plugin.Config)(0xc0000106c0), Router:(*plugin.Config)(0xc0000106a8), Cache:(*plugin.Config)(0xc000010690), Registry:(*plugin.Config)(0xc000010660), KeyManager:(*plugin.Config)(0xc000010678), KafkaProducer:(*plugin.Config)(nil), KafkaConsumer:(*plugin.Config)(nil), RabbitMQConsumer:(*plugin.Config)(nil), Consumer:(*plugin.Config)(nil), TransportWrapper:(*plugin.Config)(nil), Middleware:[]plugin.Config{plugin.Config{ID:\"reqpreprocessor\", Config:map[string]string{\"contextKeys\":\"transaction_id,message_id,parent_id\", \"role\":\"bpp\"}}}, Steps:[]plugin.Config(nil)}, Steps:[]string{\"addRoute\", \"sign\"}, Type:\"std\", RegistryURL:\"\", Role:\"bpp\", SubscriberID:\"uat-bpp-opci-adapter.ubc.nbsl.org.in\", HttpClientConfig:handler.HttpClientConfig{MaxIdleConns:1000, IdleConnTimeout:300000000000, MaxIdleConnsPerHost:200, ResponseHeaderTimeout:5000000000}}}}"}
+{"level":"info","parent_id":"bpp:uat-bpp-opci-adapter.ubc.nbsl.org.in:ddcb22c1cb70","time":"2026-07-23T10:22:45Z","message":"HTTP server listening on :8002"}
